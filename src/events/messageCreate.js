@@ -1,5 +1,6 @@
 import { handleLinkScan } from '../features/vtLinkScanner.js';
 import { getGuildConfig } from '../database/repositories/GuildConfigRepository.js';
+import { getAfk, removeAfk } from '../database/repositories/AfkRepository.js';
 import {
   tryRickroll,
   tryStare,
@@ -22,6 +23,32 @@ export default {
 
     // Config du serveur (pour les toggles easter eggs)
     const cfg = getGuildConfig(message.guild.id);
+
+    // ── Retour AFK : si l'auteur du message est marqué AFK, on le retire ────
+    const selfAfk = getAfk(message.author.id, message.guild.id);
+    if (selfAfk) {
+      removeAfk(message.author.id, message.guild.id);
+      message.reply({
+        content: `Bienvenue de retour **${message.member?.displayName ?? message.author.username}** ! Ton statut AFK a été retiré.`,
+      }).catch(() => null);
+    }
+
+    // ── Notification AFK : si un utilisateur AFK est mentionné ──────────────
+    if (message.mentions.users.size) {
+      const afkNotices = [];
+      for (const [, user] of message.mentions.users) {
+        if (user.bot || user.id === message.author.id) continue;
+        const afkData = getAfk(user.id, message.guild.id);
+        if (afkData) {
+          const since = Math.floor(afkData.set_at ?? (Date.now() / 1000));
+          afkNotices.push(`💤 **${user.tag}** est AFK depuis <t:${since}:R> — *${afkData.reason}*`);
+        }
+      }
+      if (afkNotices.length) {
+        message.reply({ content: afkNotices.join('\n') }).catch(() => null);
+        return; // on ne déclenche pas les easter eggs pour ce message
+      }
+    }
 
     // Mention directe du bot (prioritaire)
     if (await tryMentionResponse(message, client.user.id, cfg)) return;

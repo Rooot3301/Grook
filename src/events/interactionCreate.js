@@ -48,9 +48,18 @@ export default {
       }
     }
 
-    // ── Boutons & modals (jeux, etc.) ─────────────────────────────────────────
-    if (interaction.isButton() || interaction.isModalSubmit()) {
-      const handler = client.interactionHandlers?.get(interaction.customId);
+    // ── Boutons & modals (jeux, settings, giveaways, etc.) ────────────────────
+    if (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu()) {
+      // Recherche exacte, puis par préfixe (pour les handlers settings_<id>_*)
+      let handler = client.interactionHandlers?.get(interaction.customId);
+      if (!handler && client.interactionHandlers) {
+        for (const [key, fn] of client.interactionHandlers) {
+          if (interaction.customId.startsWith(key)) {
+            handler = fn;
+            break;
+          }
+        }
+      }
       if (handler) {
         try {
           await handler(interaction, client);

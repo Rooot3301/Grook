@@ -90,6 +90,28 @@ db.exec(`
     created_at INTEGER DEFAULT (unixepoch())
   );
   CREATE INDEX IF NOT EXISTS idx_reminders_fires ON reminders(fires_at);
+
+  CREATE TABLE IF NOT EXISTS afk_status (
+    user_id  TEXT NOT NULL,
+    guild_id TEXT NOT NULL,
+    reason   TEXT DEFAULT 'AFK',
+    set_at   INTEGER DEFAULT (unixepoch()),
+    PRIMARY KEY (user_id, guild_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS giveaways (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id   TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    message_id TEXT,
+    prize      TEXT NOT NULL,
+    host_id    TEXT NOT NULL,
+    ends_at    INTEGER NOT NULL,
+    ended      INTEGER DEFAULT 0,
+    winner_id  TEXT,
+    created_at INTEGER DEFAULT (unixepoch())
+  );
+  CREATE INDEX IF NOT EXISTS idx_giveaways_ends ON giveaways(ends_at, ended);
 `);
 
 // Migration : ajout des colonnes easter eggs sur les DB existantes

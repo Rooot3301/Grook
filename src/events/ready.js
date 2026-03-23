@@ -1,6 +1,7 @@
 import { startRichPresenceRotation } from '../features/richPresence.js';
 import { processExpiredTempBans } from '../features/tempbans.js';
 import { loadPendingReminders } from '../features/reminders.js';
+import { loadActiveGiveaways } from '../features/giveaways.js';
 import { logger } from '../utils/logger.js';
 
 const TEMPBAN_INTERVAL_MS = 60_000; // vérification toutes les 60s
@@ -18,7 +19,10 @@ export default {
     // Recharge les rappels persistés en DB
     loadPendingReminders(client);
 
-    // Puis vérification périodique
+    // Replanifie les giveaways actifs
+    loadActiveGiveaways(client);
+
+    // Puis vérification périodique des temp-bans
     setInterval(() => processExpiredTempBans(client), TEMPBAN_INTERVAL_MS);
   },
 };
