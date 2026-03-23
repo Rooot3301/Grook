@@ -188,176 +188,120 @@ banner() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
-# MENU INTERACTIF
+# MENU INTERACTIF (saisie numérique)
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Structure du menu : "clé|label|description|section"
+# "numéro|clé|label|description"  — groupés visuellement par section
 MENU_ITEMS=(
-  "status|Statut|Affiche le statut du bot|MONITORING"
-  "start|Démarrer|Démarre le bot (PM2 ou bare-node)|CYCLE"
-  "stop|Arrêter|Arrête le bot|CYCLE"
-  "restart|Redémarrer|Redémarre le bot|CYCLE"
-  "monitor|Dashboard|Temps réel : RAM, CPU, uptime, logs|MONITORING"
-  "health|Diagnostic|Vérifie l'installation complète|MONITORING"
-  "logs|Logs|Affiche les derniers logs|MONITORING"
-  "update|Mettre à jour|git pull + npm ci + backup + restart|MAINTENANCE"
-  "backup|Sauvegarder DB|Copie la base de données (rotation 10)|MAINTENANCE"
-  "config|Configuration|Affiche .env (valeurs masquées)|MAINTENANCE"
-  "webhook-test|Test Webhook|Envoie une notification Discord test|MAINTENANCE"
-  "dev|Mode dev|node --watch, rechargement auto|CYCLE"
-  "version|Versions|Node, npm, PM2, bot|MAINTENANCE"
+  # ── Cycle de vie ──────────────────────────────────────────────────────────
+  " 1|start|Démarrer|Démarre le bot"
+  " 2|stop|Arrêter|Arrête le bot"
+  " 3|restart|Redémarrer|Redémarre le bot"
+  " 4|dev|Mode dev|node --watch, rechargement auto"
+  # ── Monitoring ────────────────────────────────────────────────────────────
+  " 5|status|Statut|Affiche le statut du bot"
+  " 6|monitor|Dashboard|Temps réel : RAM, CPU, uptime, logs"
+  " 7|health|Diagnostic|Vérifie l'installation complète"
+  " 8|logs|Logs|Affiche les derniers logs"
+  # ── Maintenance ───────────────────────────────────────────────────────────
+  " 9|update|Mettre à jour|git pull + npm ci + backup + restart"
+  "10|backup|Sauvegarder DB|Copie la base de données (rotation 10)"
+  "11|config|Configuration|Affiche .env (valeurs masquées)"
+  "12|webhook-test|Test Webhook|Envoie une notification Discord test"
+  "13|version|Versions|Node, npm, PM2, bot"
+  "14|install|Installer|Installation initiale des dépendances"
 )
 
-# Retourne label, description, section d'un item
-menu_field() { echo "${MENU_ITEMS[$1]}" | cut -d'|' -f"$2"; }
+menu_num()  { echo "${MENU_ITEMS[$1]}" | cut -d'|' -f1 | tr -d ' '; }
+menu_key()  { echo "${MENU_ITEMS[$1]}" | cut -d'|' -f2; }
+menu_lbl()  { echo "${MENU_ITEMS[$1]}" | cut -d'|' -f3; }
+menu_desc() { echo "${MENU_ITEMS[$1]}" | cut -d'|' -f4; }
 
 draw_menu() {
-  local sel="$1"
-  local total="${#MENU_ITEMS[@]}"
-  local W=58
-
+  local W=60
   clear
   banner
 
-  # Statut en haut
   local st_line; st_line=$(bot_status_line)
-  printf "  ${DIM}Bot :${NC} %b\n\n" "$st_line"
+  printf "  Bot : %b\n\n" "$st_line"
 
   box_top $W
-
-  local prev_section=""
-  local i
-  for (( i=0; i<total; i++ )); do
-    local key;  key=$(menu_field $i 1)
-    local lbl;  lbl=$(menu_field $i 2)
-    local desc; desc=$(menu_field $i 3)
-    local sec;  sec=$(menu_field $i 4)
-
-    # Séparateur de section
-    if [[ "$sec" != "$prev_section" ]]; then
-      [[ -n "$prev_section" ]] && box_sep $W
-      box_head $W "  $(section_icon "$sec") ${sec}"
-      box_sep $W
-      prev_section="$sec"
-    fi
-
-    if (( i == sel )); then
-      # Ligne sélectionnée — fond bleu
-      local row="${BG_SEL}${BOLD}  ▶  $(printf '%-14s' "$lbl")${NC}${BG_SEL}${DIM}  ${desc}${NC}"
-      box_line $W "$row"
-    else
-      local row="     ${G}$(printf '%-14s' "$lbl")${NC}${DIM}  ${desc}${NC}"
-      box_line $W "$row"
-    fi
+  box_head $W "  🚀 Cycle de vie"
+  box_sep $W
+  for i in 0 1 2 3; do
+    box_line $W "  ${Y}$(menu_num $i)${NC}  ${G}$(printf '%-16s' "$(menu_lbl $i)")${NC}${DIM}$(menu_desc $i)${NC}"
   done
-
+  box_sep $W
+  box_head $W "  📊 Monitoring"
+  box_sep $W
+  for i in 4 5 6 7; do
+    box_line $W "  ${Y}$(menu_num $i)${NC}  ${G}$(printf '%-16s' "$(menu_lbl $i)")${NC}${DIM}$(menu_desc $i)${NC}"
+  done
+  box_sep $W
+  box_head $W "  🔧 Maintenance"
+  box_sep $W
+  for i in 8 9 10 11 12 13; do
+    box_line $W "  ${Y}$(menu_num $i)${NC}  ${G}$(printf '%-16s' "$(menu_lbl $i)")${NC}${DIM}$(menu_desc $i)${NC}"
+  done
+  box_sep $W
+  box_line $W "  ${DIM}q  Quitter${NC}"
   box_bot $W
-  printf "\n  ${DIM}↑↓ Naviguer   Entrée Exécuter   q Quitter${NC}\n"
+  printf "\n  ${BOLD}Votre choix :${NC} "
 }
 
-section_icon() {
-  case "$1" in
-    CYCLE)      echo "🚀" ;;
-    MONITORING) echo "📊" ;;
-    MAINTENANCE)echo "🔧" ;;
-    *)          echo "•"  ;;
-  esac
-}
-
-# Lit une touche (gère les séquences d'échappement des flèches)
-read_key() {
-  local key
-  IFS= read -rsn1 key
-  if [[ "$key" == $'\x1b' ]]; then
-    local seq
-    IFS= read -rsn2 -t 0.1 seq 2>/dev/null || seq=""
-    case "$seq" in
-      "[A") echo "UP"    ;;
-      "[B") echo "DOWN"  ;;
-      "[H") echo "HOME"  ;;
-      "[F") echo "END"   ;;
-      *)    echo "ESC"   ;;
-    esac
-  elif [[ "$key" == "" ]]; then
-    echo "ENTER"
-  elif [[ "$key" == "q" || "$key" == "Q" ]]; then
-    echo "QUIT"
-  elif [[ "$key" == "k" ]]; then echo "UP"
-  elif [[ "$key" == "j" ]]; then echo "DOWN"
-  else echo "OTHER"
-  fi
-}
-
-run_menu_item() {
-  local idx="$1"
-  local key; key=$(menu_field "$idx" 1)
-
-  # Nettoyage écran avant d'exécuter
+exec_menu_key() {
+  local key="$1"
   clear
   banner
-
-  # Exécution de la commande
   case "$key" in
-    status)       cmd_status ;;
     start)        cmd_start ;;
     stop)         cmd_stop ;;
     restart)      cmd_restart ;;
+    dev)
+      printf "  ${Y}Mode dev — Ctrl+C pour quitter.${NC}\n\n"
+      cmd_dev; return ;;
+    status)       cmd_status ;;
     monitor)
-      printf "  ${DIM}Intervalle de rafraîchissement en secondes (défaut 2) : ${NC}"
-      local interval; read -r interval
-      interval="${interval:-2}"
-      cmd_monitor "$interval"
-      return  # monitor gère son propre écran, pas de pause
-      ;;
+      printf "  ${DIM}Intervalle en secondes (défaut 2) : ${NC}"
+      local s; read -r s
+      cmd_monitor "${s:-2}"; return ;;
     health)       cmd_health ;;
     logs)
       printf "  ${DIM}Nombre de lignes (défaut 50) : ${NC}"
       local n; read -r n
-      cmd_logs "${n:-50}"
-      ;;
+      cmd_logs "${n:-50}" ;;
     update)       cmd_update ;;
     backup)       cmd_backup ;;
     config)       cmd_config_show ;;
     webhook-test) cmd_webhook_test ;;
-    dev)
-      printf "  ${Y}Mode dev démarré. Ctrl+C pour quitter.${NC}\n\n"
-      cmd_dev
-      return
-      ;;
     version)      cmd_version ;;
-    *) warn "Commande inconnue : $key" ;;
+    install)      cmd_install ;;
+    *)            warn "Commande inconnue." ;;
   esac
-
-  printf "\n  ${DIM}Appuyez sur Entrée pour revenir au menu…${NC}"
-  read -r
+  printf "\n  ${DIM}Entrée pour revenir au menu…${NC}"; read -r
 }
 
 cmd_menu() {
-  command -v tput &>/dev/null && tput civis 2>/dev/null || true
-  trap 'tput cnorm 2>/dev/null; printf "\n  ${G}À bientôt !${NC}\n\n"; exit 0' INT TERM EXIT
-
-  local sel=0
-  local total="${#MENU_ITEMS[@]}"
+  trap 'printf "\n\n  ${G}À bientôt !${NC}\n\n"; exit 0' INT TERM
 
   while true; do
-    draw_menu "$sel"
-    local key; key=$(read_key)
-    case "$key" in
-      UP)    (( sel > 0 ))           && (( sel-- )) || sel=$(( total - 1 )) ;;
-      DOWN)  (( sel < total - 1 ))   && (( sel++ )) || sel=0 ;;
-      HOME)  sel=0 ;;
-      END)   sel=$(( total - 1 )) ;;
-      ENTER)
-        tput cnorm 2>/dev/null || true
-        run_menu_item "$sel"
-        tput civis 2>/dev/null || true
-        ;;
-      QUIT)
-        tput cnorm 2>/dev/null || true
-        printf "\n  ${G}À bientôt !${NC}\n\n"
-        exit 0
-        ;;
-    esac
+    draw_menu
+    local input; read -r input
+    [[ "$input" == "q" || "$input" == "Q" ]] && {
+      printf "\n  ${G}À bientôt !${NC}\n\n"; exit 0
+    }
+    # Recherche de l'entrée correspondant au numéro saisi
+    local found=0
+    for (( i=0; i<${#MENU_ITEMS[@]}; i++ )); do
+      if [[ "$(menu_num $i)" == "$input" ]]; then
+        exec_menu_key "$(menu_key $i)"
+        found=1; break
+      fi
+    done
+    (( found == 0 )) && {
+      printf "  ${R}Choix invalide : %s${NC}\n" "$input"
+      sleep 1
+    }
   done
 }
 
