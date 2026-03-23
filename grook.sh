@@ -621,10 +621,13 @@ cmd_health() {
   fi
 
   git rev-parse --git-dir &>/dev/null 2>&1 && {
-    local behind; behind=$(git rev-list HEAD..origin/main --count 2>/dev/null || echo "?")
+    local br; br=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
+    local remote_ref; remote_ref=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo "origin/${br}")
+    git fetch origin "$br" &>/dev/null || true
+    local behind; behind=$(git rev-list "HEAD..${remote_ref}" --count 2>/dev/null || echo "?")
     [[ "$behind" == "0" ]] \
-      && success "Git à jour ($(get_git_hash))" \
-      || warn "${behind} commit(s) en retard sur origin/main"
+      && success "Git à jour — ${C}${br}${NC} ($(get_git_hash))" \
+      || warn "${behind} commit(s) en retard sur ${remote_ref}"
   }
 
   echo ""
@@ -655,6 +658,11 @@ cmd_update() {
 
   git rev-parse --git-dir &>/dev/null || die "Pas un dépôt git."
 
+  # Détection de la branche courante + branche de tracking distante
+  local branch; branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
+  local remote; remote=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo "origin/${branch}")
+  info "Branche : ${C}${branch}${NC}  →  remote : ${C}${remote}${NC}"
+
   local before; before=$(get_git_hash)
   local ver_before; ver_before=$(get_version)
 
@@ -663,15 +671,16 @@ cmd_update() {
 
   step "Récupération des modifications"
   spinner_start "git fetch…"
-  git fetch origin main &>/dev/null \
+  git fetch origin "$branch" &>/dev/null \
     && spinner_stop true "Fetch OK" \
     || { spinner_stop false "git fetch échoué"; send_webhook $WH_RED "❌ Update échoué" "Échec git fetch sur \`$(hostname)\`"; die "Vérifiez la connexion."; }
 
-  local behind; behind=$(git rev-list HEAD..origin/main --count 2>/dev/null || echo "0")
-  [[ "$behind" == "0" ]] && { success "Déjà à jour."; return; }
+  local behind; behind=$(git rev-list "HEAD..${remote}" --count 2>/dev/null || echo "0")
+  [[ "$behind" == "0" ]] && { success "Déjà à jour ($(get_git_hash))."; return; }
+  info "${behind} commit(s) disponible(s)."
 
   spinner_start "git pull…"
-  git pull --ff-only origin main &>/dev/null \
+  git pull --ff-only origin "$branch" &>/dev/null \
     && spinner_stop true "Merge OK" \
     || { spinner_stop false "Conflit git"; send_webhook $WH_RED "❌ Update échoué" "Conflit git sur \`$(hostname)\`"; die "Résolvez les conflits manuellement."; }
 
