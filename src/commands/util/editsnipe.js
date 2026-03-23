@@ -2,12 +2,11 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getEdited } from '../../features/snipe.js';
 import { COLORS, errorEmbed } from '../../utils/embeds.js';
 
-export default {
-  data: new SlashCommandBuilder()
-    .setName('editsnipe')
-    .setDescription('Affiche la dernière modification de message dans ce salon.'),
+export const data = new SlashCommandBuilder()
+  .setName('editsnipe')
+  .setDescription('Affiche la dernière modification de message dans ce salon.');
 
-  async execute(interaction) {
+export async function execute(interaction) {
     const entry = getEdited(interaction.channelId);
 
     if (!entry) {
@@ -29,5 +28,4 @@ export default {
       .setTimestamp(entry.timestamp);
 
     await interaction.reply({ embeds: [embed] });
-  },
-};
+}

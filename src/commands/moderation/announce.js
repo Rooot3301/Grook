@@ -1,32 +1,31 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { COLORS, errorEmbed } from '../../utils/embeds.js';
 
-export default {
-  data: new SlashCommandBuilder()
-    .setName('announce')
-    .setDescription('Envoie une annonce stylisée dans un salon.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .addStringOption(o =>
-      o.setName('message')
-       .setDescription('Contenu de l\'annonce')
-       .setRequired(true)
-       .setMaxLength(4000))
-    .addChannelOption(o =>
-      o.setName('salon')
-       .setDescription('Salon cible (défaut : salon actuel)'))
-    .addStringOption(o =>
-      o.setName('titre')
-       .setDescription('Titre de l\'embed (optionnel)')
-       .setMaxLength(256))
-    .addStringOption(o =>
-      o.setName('couleur')
-       .setDescription('Couleur hex (ex: #FF0000) — défaut : blurple')
-       .setMaxLength(7))
-    .addBooleanOption(o =>
-      o.setName('ping')
-       .setDescription('Mentionner @everyone ? (défaut : non)')),
+export const data = new SlashCommandBuilder()
+  .setName('announce')
+  .setDescription('Envoie une annonce stylisée dans un salon.')
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+  .addStringOption(o =>
+    o.setName('message')
+     .setDescription('Contenu de l\'annonce')
+     .setRequired(true)
+     .setMaxLength(4000))
+  .addChannelOption(o =>
+    o.setName('salon')
+     .setDescription('Salon cible (défaut : salon actuel)'))
+  .addStringOption(o =>
+    o.setName('titre')
+     .setDescription('Titre de l\'embed (optionnel)')
+     .setMaxLength(256))
+  .addStringOption(o =>
+    o.setName('couleur')
+     .setDescription('Couleur hex (ex: #FF0000) — défaut : blurple')
+     .setMaxLength(7))
+  .addBooleanOption(o =>
+    o.setName('ping')
+     .setDescription('Mentionner @everyone ? (défaut : non)'));
 
-  async execute(interaction) {
+export async function execute(interaction) {
     const content  = interaction.options.getString('message');
     const channel  = interaction.options.getChannel('salon') ?? interaction.channel;
     const titre    = interaction.options.getString('titre');
@@ -70,5 +69,4 @@ export default {
         ephemeral: true,
       });
     }
-  },
-};
+}

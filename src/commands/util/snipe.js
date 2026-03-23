@@ -2,12 +2,11 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getDeleted } from '../../features/snipe.js';
 import { COLORS, errorEmbed } from '../../utils/embeds.js';
 
-export default {
-  data: new SlashCommandBuilder()
-    .setName('snipe')
-    .setDescription('Affiche le dernier message supprimé dans ce salon.'),
+export const data = new SlashCommandBuilder()
+  .setName('snipe')
+  .setDescription('Affiche le dernier message supprimé dans ce salon.');
 
-  async execute(interaction) {
+export async function execute(interaction) {
     const entry = getDeleted(interaction.channelId);
 
     if (!entry) {
@@ -33,5 +32,4 @@ export default {
     }
 
     await interaction.reply({ embeds: [embed] });
-  },
-};
+}

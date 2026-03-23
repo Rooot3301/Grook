@@ -20,22 +20,21 @@ function parseDuration(str) {
   return parseInt(m[1]) * DURATION_MAP[m[2]] * 1000; // ms
 }
 
-export default {
-  data: new SlashCommandBuilder()
-    .setName('giveaway')
-    .setDescription('Lance un giveaway dans ce salon.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addStringOption(o =>
-      o.setName('lot')
-       .setDescription('Lot à gagner')
-       .setRequired(true)
-       .setMaxLength(100))
-    .addStringOption(o =>
-      o.setName('durée')
-       .setDescription('Durée (ex: 1h, 30m, 2d, 60s)')
-       .setRequired(true)),
+export const data = new SlashCommandBuilder()
+  .setName('giveaway')
+  .setDescription('Lance un giveaway dans ce salon.')
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .addStringOption(o =>
+    o.setName('lot')
+     .setDescription('Lot à gagner')
+     .setRequired(true)
+     .setMaxLength(100))
+  .addStringOption(o =>
+    o.setName('durée')
+     .setDescription('Durée (ex: 1h, 30m, 2d, 60s)')
+     .setRequired(true));
 
-  async execute(interaction) {
+export async function execute(interaction) {
     const prize      = interaction.options.getString('lot');
     const dureStr    = interaction.options.getString('durée');
     const durationMs = parseDuration(dureStr);
@@ -86,5 +85,4 @@ export default {
         await btn.message.edit({ embeds: [buildGiveawayEmbed(fullGiveaway, pool.size)] });
       } catch { /* ignoré si message supprimé */ }
     });
-  },
-};
+}

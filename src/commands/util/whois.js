@@ -1,16 +1,15 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { COLORS, errorEmbed } from '../../utils/embeds.js';
 
-export default {
-  data: new SlashCommandBuilder()
-    .setName('whois')
-    .setDescription("Affiche les informations d'un utilisateur via son ID ou mention.")
-    .addStringOption(o =>
-      o.setName('cible')
-       .setDescription('ID Discord ou mention (@user)')
-       .setRequired(true)),
+export const data = new SlashCommandBuilder()
+  .setName('whois')
+  .setDescription("Affiche les informations d'un utilisateur via son ID ou mention.")
+  .addStringOption(o =>
+    o.setName('cible')
+     .setDescription('ID Discord ou mention (@user)')
+     .setRequired(true));
 
-  async execute(interaction) {
+export async function execute(interaction) {
     await interaction.deferReply();
 
     const raw = interaction.options.getString('cible').replace(/[<@!>]/g, '').trim();
@@ -67,5 +66,4 @@ export default {
 
     embed.setTimestamp();
     await interaction.editReply({ embeds: [embed] });
-  },
-};
+}
