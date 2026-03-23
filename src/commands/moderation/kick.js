@@ -8,18 +8,22 @@ export const data = new SlashCommandBuilder()
   .setDescription('Expulser un utilisateur du serveur.')
   .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
   .addUserOption(o => o.setName('user').setDescription('Utilisateur à expulser').setRequired(true))
-  .addStringOption(o => o.setName('reason').setDescription('Raison de l\'expulsion').setRequired(false));
+  .addStringOption(o => o.setName('reason').setDescription('Raison de l\'expulsion').setRequired(false).setMaxLength(512));
 
 export async function execute(interaction) {
   const target = interaction.options.getUser('user', true);
   const reason = interaction.options.getString('reason') || 'Aucune raison';
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
 
+  if (target.id === interaction.user.id)
+    return interaction.reply({ content: '❌ Vous ne pouvez pas vous expulser vous-même.', ephemeral: true });
+  if (target.id === interaction.client.user.id)
+    return interaction.reply({ content: '❌ Je ne peux pas me kick moi-même.', ephemeral: true });
+
+  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
   if (!member) return interaction.reply({ content: '❌ Utilisateur introuvable.', ephemeral: true });
-  if (!member.kickable) return interaction.reply({ content: '❌ Je ne peux pas expulser cet utilisateur.', ephemeral: true });
-  if (member.roles.highest.position >= interaction.member.roles.highest.position) {
+  if (!member.kickable) return interaction.reply({ content: '❌ Je ne peux pas expulser cet utilisateur (rôle supérieur ou égal au mien).', ephemeral: true });
+  if (member.roles.highest.position >= interaction.member.roles.highest.position)
     return interaction.reply({ content: '❌ Rôle égal ou supérieur au vôtre.', ephemeral: true });
-  }
 
   await target.send(`👢 Tu as été **expulsé** de **${interaction.guild.name}**.\n> Raison : ${reason}`).catch(() => {});
 

@@ -65,6 +65,14 @@ export default {
           await handler(interaction, client);
         } catch (err) {
           logger.error('[interaction] Erreur dans un handler :', err.message);
+          // Acquitte l'interaction pour éviter le spinner infini côté client
+          try {
+            if (!interaction.replied && !interaction.deferred) {
+              await interaction.reply({ content: '❌ Une erreur est survenue.', ephemeral: true });
+            } else if (interaction.deferred) {
+              await interaction.editReply({ content: '❌ Une erreur est survenue.' });
+            }
+          } catch { /* ignoré */ }
         }
       }
     }

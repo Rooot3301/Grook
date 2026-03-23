@@ -13,7 +13,7 @@ export const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
   .addUserOption(o => o.setName('user').setDescription('Utilisateur à bannir').setRequired(true))
   .addStringOption(o => o.setName('duration').setDescription('Durée (ex: 1h, 3d, 2w)').setRequired(true))
-  .addStringOption(o => o.setName('reason').setDescription('Raison du bannissement').setRequired(false));
+  .addStringOption(o => o.setName('reason').setDescription('Raison du bannissement').setRequired(false).setMaxLength(512));
 
 export async function execute(interaction) {
   const target      = interaction.options.getUser('user', true);
@@ -21,15 +21,19 @@ export async function execute(interaction) {
   const reason      = interaction.options.getString('reason') || 'Aucune raison';
   const ms          = parseDuration(durationStr);
 
+  if (target.id === interaction.user.id)
+    return interaction.reply({ content: '❌ Vous ne pouvez pas vous bannir vous-même.', ephemeral: true });
+  if (target.id === interaction.client.user.id)
+    return interaction.reply({ content: '❌ Je ne peux pas me bannir moi-même.', ephemeral: true });
+
   if (!ms) return interaction.reply({ content: '❌ Durée invalide. Exemples : `1h`, `3d`, `2w`.', ephemeral: true });
   if (ms > MAX_DURATION_MS) return interaction.reply({ content: '❌ Durée maximale : 1 an.', ephemeral: true });
 
   const member = await interaction.guild.members.fetch(target.id).catch(() => null);
   if (!member) return interaction.reply({ content: '❌ Utilisateur introuvable sur ce serveur.', ephemeral: true });
-  if (!member.bannable) return interaction.reply({ content: '❌ Je ne peux pas bannir cet utilisateur.', ephemeral: true });
-  if (member.roles.highest.position >= interaction.member.roles.highest.position) {
+  if (!member.bannable) return interaction.reply({ content: '❌ Je ne peux pas bannir cet utilisateur (rôle supérieur ou égal au mien).', ephemeral: true });
+  if (member.roles.highest.position >= interaction.member.roles.highest.position)
     return interaction.reply({ content: '❌ Rôle égal ou supérieur au vôtre.', ephemeral: true });
-  }
 
   const expiresAt = Date.now() + ms;
   const formatted = formatDuration(ms);

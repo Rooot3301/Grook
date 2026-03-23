@@ -8,18 +8,22 @@ export const data = new SlashCommandBuilder()
   .setDescription('Ban + unban immédiat pour purger les messages d\'un membre (7 jours).')
   .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
   .addUserOption(o => o.setName('user').setDescription('Utilisateur à softban').setRequired(true))
-  .addStringOption(o => o.setName('reason').setDescription('Raison du softban').setRequired(false));
+  .addStringOption(o => o.setName('reason').setDescription('Raison du softban').setRequired(false).setMaxLength(512));
 
 export async function execute(interaction) {
   const target = interaction.options.getUser('user', true);
   const reason = interaction.options.getString('reason') || 'Aucune raison';
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
 
+  if (target.id === interaction.user.id)
+    return interaction.reply({ content: '❌ Vous ne pouvez pas vous softban vous-même.', ephemeral: true });
+  if (target.id === interaction.client.user.id)
+    return interaction.reply({ content: '❌ Je ne peux pas me softban moi-même.', ephemeral: true });
+
+  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
   if (!member) return interaction.reply({ content: '❌ Utilisateur introuvable sur ce serveur.', ephemeral: true });
-  if (!member.bannable) return interaction.reply({ content: '❌ Je ne peux pas bannir cet utilisateur.', ephemeral: true });
-  if (member.roles.highest.position >= interaction.member.roles.highest.position) {
+  if (!member.bannable) return interaction.reply({ content: '❌ Je ne peux pas bannir cet utilisateur (rôle supérieur ou égal au mien).', ephemeral: true });
+  if (member.roles.highest.position >= interaction.member.roles.highest.position)
     return interaction.reply({ content: '❌ Rôle égal ou supérieur au vôtre.', ephemeral: true });
-  }
 
   await target.send(`🧹 Tu as été **softban** de **${interaction.guild.name}** (messages supprimés).\n> Raison : ${reason}`).catch(() => {});
 

@@ -93,6 +93,11 @@ export async function finaliseGiveaway(client, giveawayId) {
   endGiveaway(giveawayId, winner);
   participants.delete(giveawayId);
 
+  // Nettoyage du handler de bouton
+  if (client.interactionHandlers) {
+    client.interactionHandlers.delete(`giveaway_join_${giveawayId}`);
+  }
+
   // Mise à jour du message Discord
   if (!giveaway.message_id || !giveaway.channel_id) return;
 

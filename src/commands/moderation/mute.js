@@ -12,7 +12,7 @@ export const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
   .addUserOption(o => o.setName('user').setDescription('Utilisateur à mute').setRequired(true))
   .addStringOption(o => o.setName('duration').setDescription('Durée (ex: 10m, 2h, 1d)').setRequired(true))
-  .addStringOption(o => o.setName('reason').setDescription('Raison du mute').setRequired(false));
+  .addStringOption(o => o.setName('reason').setDescription('Raison du mute').setRequired(false).setMaxLength(512));
 
 export async function execute(interaction) {
   const target      = interaction.options.getUser('user', true);
@@ -20,12 +20,19 @@ export async function execute(interaction) {
   const reason      = interaction.options.getString('reason') || 'Aucune raison';
   const ms          = parseDuration(durationStr);
 
+  if (target.id === interaction.user.id)
+    return interaction.reply({ content: '❌ Vous ne pouvez pas vous mute vous-même.', ephemeral: true });
+  if (target.id === interaction.client.user.id)
+    return interaction.reply({ content: '❌ Je ne peux pas me mute moi-même.', ephemeral: true });
+
   if (!ms) return interaction.reply({ content: '❌ Durée invalide. Exemples : `10m`, `2h`, `1d`, `1w`.', ephemeral: true });
   if (ms > MAX_TIMEOUT_MS) return interaction.reply({ content: '❌ Durée maximale : 28 jours.', ephemeral: true });
 
   const member = await interaction.guild.members.fetch(target.id).catch(() => null);
   if (!member) return interaction.reply({ content: '❌ Utilisateur introuvable.', ephemeral: true });
-  if (!member.moderatable) return interaction.reply({ content: '❌ Je ne peux pas mute cet utilisateur.', ephemeral: true });
+  if (!member.moderatable) return interaction.reply({ content: '❌ Je ne peux pas mute cet utilisateur (rôle supérieur ou égal au mien).', ephemeral: true });
+  if (member.roles.highest.position >= interaction.member.roles.highest.position)
+    return interaction.reply({ content: '❌ Rôle égal ou supérieur au vôtre.', ephemeral: true });
 
   await target.send(`🔇 Tu as été **mute** dans **${interaction.guild.name}** pendant **${durationStr}**.\n> Raison : ${reason}`).catch(() => {});
 

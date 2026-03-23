@@ -29,11 +29,20 @@ function toBase64Url(str) {
 }
 
 async function vtGet(path, apiKey) {
-  const res = await fetch(`https://www.virustotal.com/api/v3${path}`, {
-    headers: { 'x-apikey': apiKey, accept: 'application/json' },
-  });
-  if (!res.ok) throw new Error(`VT HTTP ${res.status}`);
-  return res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`https://www.virustotal.com/api/v3${path}`, {
+      headers: { 'x-apikey': apiKey, accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`VT HTTP ${res.status}`);
+    const ct = res.headers.get('content-type') ?? '';
+    if (!ct.includes('application/json')) throw new Error('VT réponse non-JSON');
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function decideVerdict(stats) {

@@ -16,13 +16,18 @@ export const data = new SlashCommandBuilder()
   .setDescription('Donner un avertissement à un membre.')
   .setDefaultMemberPermissions(PermissionFlagsBits.KickMembers)
   .addUserOption(o => o.setName('user').setDescription('Utilisateur à avertir').setRequired(true))
-  .addStringOption(o => o.setName('reason').setDescription('Raison de l\'avertissement').setRequired(false));
+  .addStringOption(o => o.setName('reason').setDescription('Raison de l\'avertissement').setRequired(false).setMaxLength(512));
 
 export async function execute(interaction) {
   const target = interaction.options.getUser('user', true);
   const reason = interaction.options.getString('reason') || 'Aucune raison';
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
 
+  if (target.id === interaction.user.id)
+    return interaction.reply({ content: '❌ Vous ne pouvez pas vous avertir vous-même.', ephemeral: true });
+  if (target.id === interaction.client.user.id)
+    return interaction.reply({ content: '❌ Je ne peux pas me warn moi-même.', ephemeral: true });
+
+  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
   if (!member) return interaction.reply({ content: '❌ Utilisateur introuvable.', ephemeral: true });
 
   await target.send(`⚠️ Tu as reçu un **avertissement** dans **${interaction.guild.name}**.\n> Raison : ${reason}`).catch(() => {});
