@@ -1,0 +1,11 @@
+# Normalisation des fins de lignes
+* text=auto
+
+# Scripts bash — toujours LF (sinon inutilisable sur Linux/serveur)
+*.sh text eol=lf
+
+# Fichiers JS/JSON — LF
+*.js   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.env* text eol=lf
