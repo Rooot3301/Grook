@@ -2,19 +2,16 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 
 // ─── Probabilités ─────────────────────────────────────────────────────────────
 const CHANCES = {
-  rickroll:    0.005,   // 0.5%  — sur chaque message
-  prophecy:    0.001,   // 0.1%  — 6h cooldown par serveur
-  stare:       0.003,   // 0.3%  — réaction 👀
-  fakeCrash:   0.002,   // 0.2%  — faux crash embed (auto-delete 5s)
-  lazy:        0.04,    // 4%    — répond fainéant à une commande
-  grookName:   0.35,    // 35%   — réponse si "grook" mentionné dans le msg
-  caps:        0.6,     // 60%   — réponse si message tout en MAJUSCULES (>10 chars)
-  niceNumber:  1.0,     // 100%  — si le message fait exactement 69 ou 420 chars
-  mention:     0.9,     // 90%   — si le bot est mentionné (laisse 10% de silence)
+  rickroll:   0.004,  // 0.4%  — sur chaque message
+  stare:      0.002,  // 0.2%  — réaction 👀 silencieuse
+  fakeCrash:  0.0015, // 0.15% — faux crash embed (auto-delete 5s)
+  lazy:       0.035,  // 3.5%  — refuse d'exécuter une commande
+  grookName:  0.25,   // 25%   — si "grook" dans le message
+  caps:       0.45,   // 45%   — message tout en MAJUSCULES
+  insult:     0.30,   // 30%   — insulte envers le bot
+  thanks:     0.35,   // 35%   — "merci grook/bot"
+  mention:    0.85,   // 85%   — mention directe du bot
 };
-
-const PROPHECY_COOLDOWN_MS = 6 * 60 * 60 * 1000;
-const lastProphecyTimes    = new Map(); // guildId → timestamp
 
 // ─── Contenu ──────────────────────────────────────────────────────────────────
 
@@ -33,23 +30,6 @@ const LAZY_MESSAGES = [
   "Tu veux vraiment que je fasse ça ? … Non.",
 ];
 
-const PROPHECIES = [
-  '🌑 Quand le centième message tombera, un modérateur trébuchera.',
-  '⚡ Bientôt, un membre sera modéré par son propre mute.',
-  "📜 La prophétie annonce la fin… mais pas aujourd'hui.",
-  "👁️ Le serveur survivra tant que personne ne prononcera mon nom trois fois.",
-  '🌊 Une vague de bans approche… ou peut-être juste une mise à jour.',
-  "🎲 Le sort a été jeté. Quelqu'un va changer d'avis bientôt.",
-  '🔮 Les astres indiquent une activité suspecte dans les DMs.',
-  "🌀 Un silence étrange précède toujours le chaos… ou le déjeuner.",
-  "🕯️ Celui qui dort le moins modère le plus.",
-  "🦅 L'aigle vole haut, mais lui aussi il crash de temps en temps.",
-  "☄️ Un événement sans précédent approche. C'est peut-être juste une update Discord.",
-  "🐍 Méfiez-vous de celui qui ping @everyone pour rien.",
-  "🌙 La nuit porte conseil. Mais aussi des messages regrettables.",
-  "⚖️ La balance penche. Quelqu'un va se faire ban avant la semaine prochaine.",
-];
-
 const GROOK_NAME_RESPONSES = [
   "Oui c'est moi, t'as un problème ?",
   "On a parlé de moi ? 👀",
@@ -66,11 +46,9 @@ const INSULT_RESPONSES = [
   "😒 Ah ouais ? Je vais noter ça dans mon registre.",
   "T'inquiète, j'ai noté. Le casier des utilisateurs irrespectueux est ouvert.",
   "Intéressant. Continue et je vais trouver une raison de te mute.",
-  "🧾 Cas numéro… laisse tomber, t'as gagné mon attention.",
   "Je suis un bot. Je ne ressens rien. *pleure en binaire*",
   "Je vais faire semblant de ne pas avoir lu ça. Pour ma santé mentale.",
   "Wow. Vraiment. Wow.",
-  "Ça va, j'ai une carapace. Mais quand même. C'était méchant.",
   "🫂 On se calme. Je suis là pour toi.",
 ];
 
@@ -92,10 +70,8 @@ const MENTION_RESPONSES = [
   "Je dormais mais bon… qu'est-ce que tu veux ?",
   "🫡 À vos ordres.",
   "Grook écoute. Parle.",
-  "On m'a mentionné. Je suis obligé de réagir. Je le fais pas de bonne grâce.",
   "Quoi encore ?",
   "Tu as 3 secondes pour justifier ce ping.",
-  "…",
   "👁️ Je t'observe depuis un moment déjà.",
 ];
 
@@ -109,7 +85,7 @@ const CAPS_RESPONSES = [
 
 const FAKE_CRASH_MESSAGES = [
   '```\nFATAL ERROR: Cannot read properties of undefined\nReferenceError: client is not defined\n    at interactionCreate.js:42:8\n```',
-  '```\nUnhandledPromiseRejection: Discord API returned 429 (Too Many Requests)\nRetrying in 999999ms...\n```',
+  '```\nUnhandledPromiseRejection: Discord API returned 429\nRetrying in 999999ms...\n```',
   '```\nSegmentation fault (core dumped)\nprocess exited with code 139\n```',
 ];
 
@@ -119,8 +95,9 @@ const roll = chance => Math.random() < chance;
 
 // ─── Easter eggs probabilistes ────────────────────────────────────────────────
 
-/** 0.5% — Rickroll sur un message. */
-export async function tryRickroll(message) {
+/** 0.4% — Rickroll. */
+export async function tryRickroll(message, cfg) {
+  if (!cfg.egg_rickroll) return false;
   if (!roll(CHANCES.rickroll)) return false;
   const link = 'https://youtu.be/xvFZjo5PgG0?si=V5vVoWMNqiVBHczB';
   const row  = new ActionRowBuilder().addComponents(
@@ -134,32 +111,17 @@ export async function tryRickroll(message) {
   return true;
 }
 
-/** 0.1% — Prophétie mystérieuse (cooldown 6h/serveur). */
-export async function tryProphecy(message) {
-  if (!roll(CHANCES.prophecy)) return false;
-  const guildId = message.guild?.id;
-  if (!guildId) return false;
-  if (Date.now() - (lastProphecyTimes.get(guildId) ?? 0) < PROPHECY_COOLDOWN_MS) return false;
-  lastProphecyTimes.set(guildId, Date.now());
-  const embed = new EmbedBuilder()
-    .setTitle('🔮 Prophétie de Grook')
-    .setDescription(pick(PROPHECIES))
-    .setColor(0x8800ff)
-    .setFooter({ text: 'Les étoiles sont capricieuses' })
-    .setTimestamp();
-  await message.channel.send({ embeds: [embed] });
-  return true;
-}
-
-/** 0.3% — Réagit au message avec 👀 sans rien dire. */
-export async function tryStare(message) {
+/** 0.2% — Réaction 👀 silencieuse. */
+export async function tryStare(message, cfg) {
+  if (!cfg.egg_stare) return false;
   if (!roll(CHANCES.stare)) return false;
   await message.react('👀').catch(() => {});
   return true;
 }
 
-/** 0.2% — Envoie un faux message d'erreur qui se supprime après 5s. */
-export async function tryFakeCrash(message) {
+/** 0.15% — Faux crash embed (auto-delete 5s). */
+export async function tryFakeCrash(message, cfg) {
+  if (!cfg.egg_fake_crash) return false;
   if (!roll(CHANCES.fakeCrash)) return false;
   const sent = await message.channel.send({
     embeds: [
@@ -176,66 +138,67 @@ export async function tryFakeCrash(message) {
 
 // ─── Easter eggs déclenchés par mots-clés ────────────────────────────────────
 
-/** 35% si "grook" est dans le message (insensible à la casse). */
-export async function tryGrookNameReaction(message) {
+/** 25% si "grook" dans le message (cooldown implicite via probabilité basse). */
+export async function tryGrookNameReaction(message, cfg) {
+  if (!cfg.egg_keywords) return false;
   if (!/grook/i.test(message.content)) return false;
   if (!roll(CHANCES.grookName)) return false;
   await message.reply({ content: pick(GROOK_NAME_RESPONSES) });
   return true;
 }
 
-/** 60% si message entièrement en majuscules de plus de 10 caractères. */
-export async function tryCapsReaction(message) {
+/** 45% si message tout en MAJUSCULES (>12 chars, présence de lettres). */
+export async function tryCapsReaction(message, cfg) {
+  if (!cfg.egg_keywords) return false;
   const text = message.content.trim();
-  if (text.length < 10) return false;
-  if (text !== text.toUpperCase() || !/[A-ZÀ-Ÿ]{5,}/.test(text)) return false;
+  if (text.length < 12) return false;
+  if (text !== text.toUpperCase() || !/[A-ZÀ-Ÿ]{6,}/.test(text)) return false;
   if (!roll(CHANCES.caps)) return false;
   await message.reply({ content: pick(CAPS_RESPONSES) });
   return true;
 }
 
-/** Insultes envers le bot (nul, inutile, débile, con, etc.). */
-export async function tryInsultReaction(message) {
-  const insults = /\b(nul|inutile|d[ée]bile|con(nard)?|idiot|stupide|merde|boulet|zero|zéro)\b/i;
+/** 30% si insulte détectée envers le bot. */
+export async function tryInsultReaction(message, cfg) {
+  if (!cfg.egg_keywords) return false;
+  const insults = /\b(nul|inutile|d[ée]bile|con(nard)?|idiot|stupide|boulet)\b/i;
   if (!insults.test(message.content)) return false;
-  if (!roll(0.4)) return false;
+  if (!roll(CHANCES.insult)) return false;
   await message.reply({ content: pick(INSULT_RESPONSES) });
   return true;
 }
 
-/** Remerciements (merci grook, merci bot, etc.). */
-export async function tryThanksReaction(message) {
+/** 35% si "merci grook" ou "merci bot". */
+export async function tryThanksReaction(message, cfg) {
+  if (!cfg.egg_keywords) return false;
   if (!/merci\s*(grook|bot)?/i.test(message.content)) return false;
-  if (!roll(0.5)) return false;
+  if (!roll(CHANCES.thanks)) return false;
   await message.reply({ content: pick(THANKS_RESPONSES) });
   return true;
 }
 
-/** Message de exactement 69 ou 420 caractères → "nice". */
-export async function tryNiceNumber(message) {
+/** 100% si message = exactement 69 ou 420 caractères. */
+export async function tryNiceNumber(message, cfg) {
+  if (!cfg.egg_nice) return false;
   const len = message.content.trim().length;
   if (len !== 69 && len !== 420) return false;
   await message.reply({ content: len === 69 ? '😏 nice' : '🍃 nice' });
   return true;
 }
 
-// ─── Easter egg sur mention du bot ───────────────────────────────────────────
-
-/** Répond quand le bot est directement mentionné (90% du temps). */
-export async function tryMentionResponse(message, clientId) {
+/** 85% si le bot est directement mentionné. */
+export async function tryMentionResponse(message, clientId, cfg) {
+  if (!cfg.egg_keywords) return false;
   if (!message.mentions.has(clientId)) return false;
   if (!roll(CHANCES.mention)) return false;
-  const response = pick(MENTION_RESPONSES);
-  // 20% de chance d'ajouter une réaction en plus de la réponse
   if (roll(0.2)) await message.react('👁️').catch(() => {});
-  await message.reply({ content: response });
+  await message.reply({ content: pick(MENTION_RESPONSES) });
   return true;
 }
 
-// ─── Easter egg sur commandes (interactionCreate) ────────────────────────────
-
-/** 4% — Grook refuse paresseusement d'exécuter une commande. */
-export async function tryLazyResponse(interaction) {
+/** 3.5% — Grook refuse paresseusement d'exécuter une commande. */
+export async function tryLazyResponse(interaction, cfg) {
+  if (!cfg.egg_lazy) return false;
   if (!roll(CHANCES.lazy)) return false;
   await interaction.reply({ content: pick(LAZY_MESSAGES), ephemeral: true });
   return true;

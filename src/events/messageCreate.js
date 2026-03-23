@@ -1,7 +1,7 @@
 import { handleLinkScan } from '../features/vtLinkScanner.js';
+import { getGuildConfig } from '../database/repositories/GuildConfigRepository.js';
 import {
   tryRickroll,
-  tryProphecy,
   tryStare,
   tryFakeCrash,
   tryGrookNameReaction,
@@ -17,23 +17,26 @@ export default {
   async execute(message, client) {
     if (message.author.bot || !message.guild) return;
 
-    // ── Scan VT ───────────────────────────────────────────────────────────────
+    // Scan VT
     await handleLinkScan(message);
 
-    // ── Mention du bot (prioritaire — pas d'autres eggs si déclenché) ─────────
-    if (await tryMentionResponse(message, client.user.id)) return;
+    // Config du serveur (pour les toggles easter eggs)
+    const cfg = getGuildConfig(message.guild.id);
 
-    // ── Déclencheurs par mots-clés ────────────────────────────────────────────
-    if (await tryThanksReaction(message))   return;
-    if (await tryGrookNameReaction(message)) return;
-    if (await tryInsultReaction(message))    return;
-    if (await tryCapsReaction(message))      return;
-    if (await tryNiceNumber(message))        return;
+    // Mention directe du bot (prioritaire)
+    if (await tryMentionResponse(message, client.user.id, cfg)) return;
 
-    // ── Easter eggs probabilistes (un seul par message max) ───────────────────
-    if (await tryRickroll(message))   return;
-    if (await tryFakeCrash(message))  return;
-    if (await tryProphecy(message))   return;
-    await tryStare(message); // peut co-exister (juste une reaction)
+    // Déclencheurs mots-clés (un seul par message)
+    if (await tryThanksReaction(message, cfg))    return;
+    if (await tryGrookNameReaction(message, cfg)) return;
+    if (await tryInsultReaction(message, cfg))    return;
+    if (await tryCapsReaction(message, cfg))      return;
+    if (await tryNiceNumber(message, cfg))        return;
+
+    // Easter eggs probabilistes (un seul par message max)
+    if (await tryRickroll(message, cfg))   return;
+    if (await tryFakeCrash(message, cfg))  return;
+    // Stare peut se cumuler (juste une réaction, peu intrusif)
+    await tryStare(message, cfg);
   },
 };

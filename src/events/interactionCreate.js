@@ -1,5 +1,6 @@
 import { tryLazyResponse } from '../features/easterEggs.js';
 import { checkCooldown, setCooldown } from '../middleware/cooldowns.js';
+import { getGuildConfig } from '../database/repositories/GuildConfigRepository.js';
 import { logger } from '../utils/logger.js';
 
 // Commandes pour lesquelles le lazy response ne s'applique pas (modération critique)
@@ -24,7 +25,8 @@ export default {
 
       // Easter egg paresseux (ignoré pour les commandes critiques)
       if (!NO_LAZY.has(interaction.commandName)) {
-        const lazy = await tryLazyResponse(interaction, {});
+        const cfg  = interaction.guild ? getGuildConfig(interaction.guild.id) : {};
+        const lazy = await tryLazyResponse(interaction, cfg);
         if (lazy) return;
       }
 

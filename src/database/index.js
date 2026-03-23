@@ -24,6 +24,13 @@ db.exec(`
     modlogs_channel_id TEXT,
     welcome_channel_id TEXT,
     vt_scanner         INTEGER DEFAULT 0,
+    -- Easter eggs (1 = actif, 0 = désactivé)
+    egg_rickroll       INTEGER DEFAULT 1,
+    egg_stare          INTEGER DEFAULT 1,
+    egg_fake_crash     INTEGER DEFAULT 1,
+    egg_keywords       INTEGER DEFAULT 1,
+    egg_nice           INTEGER DEFAULT 1,
+    egg_lazy           INTEGER DEFAULT 1,
     created_at         INTEGER DEFAULT (unixepoch()),
     updated_at         INTEGER DEFAULT (unixepoch())
   );
@@ -84,5 +91,14 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_reminders_fires ON reminders(fires_at);
 `);
+
+// Migration : ajout des colonnes easter eggs sur les DB existantes
+const eggCols = ['egg_rickroll', 'egg_stare', 'egg_fake_crash', 'egg_keywords', 'egg_nice', 'egg_lazy'];
+const existingCols = db.prepare("PRAGMA table_info(guild_configs)").all().map(r => r.name);
+for (const col of eggCols) {
+  if (!existingCols.includes(col)) {
+    db.exec(`ALTER TABLE guild_configs ADD COLUMN ${col} INTEGER DEFAULT 1`);
+  }
+}
 
 export default db;

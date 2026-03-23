@@ -3,7 +3,13 @@ import db from '../index.js';
 const DEFAULTS = {
   modlogs_channel_id: null,
   welcome_channel_id: null,
-  vt_scanner: 0,
+  vt_scanner:         0,
+  egg_rickroll:       1,
+  egg_stare:          1,
+  egg_fake_crash:     1,
+  egg_keywords:       1,
+  egg_nice:           1,
+  egg_lazy:           1,
 };
 
 /**
@@ -42,6 +48,12 @@ export function resetGuildConfig(guildId) {
     SET modlogs_channel_id = NULL,
         welcome_channel_id = NULL,
         vt_scanner = 0,
+        egg_rickroll = 1,
+        egg_stare = 1,
+        egg_fake_crash = 1,
+        egg_keywords = 1,
+        egg_nice = 1,
+        egg_lazy = 1,
         updated_at = unixepoch()
     WHERE guild_id = ?
   `).run(guildId);
