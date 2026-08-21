@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { getStatsForGuild, getStatsForUser } from '../../database/repositories/StatsRepository.js';
-import { COLORS } from '../../utils/embeds.js';
+import { getStatsForGuild, getStatsForUser } from '../../../database/repositories/StatsRepository.js';
+import { COLORS } from '../../../utils/embeds.js';
 
 export const data = new SlashCommandBuilder()
   .setName('grookstats')
@@ -41,7 +41,7 @@ export async function execute(interaction) {
     .setColor(COLORS.GAME);
 
   if (!Object.keys(stats).length) {
-    embed.setDescription('Aucune statistique enregistrée. Jouez à `/grookroulette`, `/grookguess` ou `/grooktyper` !');
+    embed.setDescription('Aucune statistique enregistrée. Joue à `/game roulette`, `/game guess` ou `/game typer` !');
     return interaction.reply({ embeds: [embed] });
   }
 

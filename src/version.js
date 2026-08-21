@@ -1,11 +1,30 @@
 // Source unique de vérité pour la version du bot.
 // Incrémentez VERSION à chaque release.
 
-export const VERSION    = '2.4.0';
+export const VERSION    = '2.5.0';
 export const BUILD_DATE = '2026-08-21';
 
 // Changelog compact — dernières entrées en tête
 export const CHANGELOG = [
+  { version: '2.5.0', date: '2026-08-21', changes: [
+    'Correctness : case IDs séquentiels atomiques (fin des collisions COUNT)',
+    'Correctness : bug 25j setTimeout corrigé via safeSetTimeout',
+    'Correctness : giveaways survivent réellement au restart (participants persistés)',
+    'Correctness : backups DB atomiques via sqlite3 .backup au lieu de cp',
+    'Correctness : uncaughtException/unhandledRejection deviennent fataux',
+    'Rich presence sérieux (version, serveurs, uptime, RAM, DB size, ping)',
+    'Automod configurable (mute/kick/ban seuils) — désactivé par défaut',
+    'Nouvelle page dashboard 06 Automod',
+    'Refonte UX : /user info|avatar|warnings|cases (fusion de 4 racines)',
+    'Refonte UX : /server info',
+    'Refonte UX : /channel lock|unlock|slowmode (fusion de 3 racines)',
+    'Refonte UX : /game guess|typer|roulette|spy|liar|stats (fusion de 6 racines)',
+    'Refonte UX : /fun flip|rate|fortune|quote (fusion de 4 racines)',
+    'Refonte UX : /snipe deleted|edited (fusion de 2 racines)',
+    'Autocomplete sur /case remove <id>',
+    '/help dynamique (lit le SlashCommandBuilder de chaque commande)',
+    'LICENSE MIT',
+  ] },
   { version: '2.4.0', date: '2026-08-21', changes: [
     'Polish complet des 40 commandes',
     'Helpers sanctions (runSanctionGuards / finalizeSanction) : anti-bot cible, DM après action, hiérarchie',

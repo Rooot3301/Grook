@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { COLORS, errorEmbed } from '../../utils/embeds.js';
+import { COLORS, errorEmbed } from '../../../utils/embeds.js';
 
 export const data = new SlashCommandBuilder()
   .setName('grookquote')

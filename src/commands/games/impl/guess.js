@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { incrementWin } from '../../database/repositories/StatsRepository.js';
+import { incrementWin } from '../../../database/repositories/StatsRepository.js';
 
 export const data = new SlashCommandBuilder()
   .setName('grookguess')

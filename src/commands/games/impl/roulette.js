@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { incrementWin } from '../../database/repositories/StatsRepository.js';
+import { incrementWin } from '../../../database/repositories/StatsRepository.js';
 
 const activeGames = new Map();
 

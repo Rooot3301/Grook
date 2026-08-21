@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
-import { getEdited } from '../../features/snipe.js';
-import { COLORS, errorEmbed } from '../../utils/embeds.js';
+import { getEdited } from '../../../features/snipe.js';
+import { COLORS, errorEmbed } from '../../../utils/embeds.js';
 
 export const data = new SlashCommandBuilder()
   .setName('editsnipe')

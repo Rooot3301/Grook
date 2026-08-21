@@ -20,8 +20,24 @@ export const data = new SlashCommandBuilder()
     .setDescription('Supprimer un cas (Manage Server requis).')
     .addStringOption(o => o
       .setName('id')
-      .setDescription('ID du cas (ex : GRC-20260821-00001)')
-      .setRequired(true)));
+      .setDescription('ID du cas (autocomplete)')
+      .setRequired(true)
+      .setAutocomplete(true)));
+
+export async function autocomplete(interaction) {
+  const sub = interaction.options.getSubcommand();
+  if (sub !== 'remove') return interaction.respond([]);
+  const focused = interaction.options.getFocused()?.toString().toUpperCase() ?? '';
+  const list = getAllCases(interaction.guild.id, { limit: 25 });
+  const matches = list
+    .filter(c => !focused || c.case_id.includes(focused) || c.type.includes(focused))
+    .slice(0, 25)
+    .map(c => ({
+      name:  `${c.case_id} · ${c.type} · <@${c.user_id}>`.replace(/<@|>/g, '').slice(0, 100),
+      value: c.case_id,
+    }));
+  await interaction.respond(matches);
+}
 
 export async function execute(interaction) {
   const sub = interaction.options.getSubcommand();

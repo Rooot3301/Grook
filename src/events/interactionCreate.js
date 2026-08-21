@@ -4,6 +4,18 @@ import { logger } from '../utils/logger.js';
 export default {
   name: 'interactionCreate',
   async execute(interaction, client) {
+    // ── Autocomplete (renvoie tôt, pas de cooldown) ──────────────────────────
+    if (interaction.isAutocomplete()) {
+      const command = client.commands.get(interaction.commandName);
+      if (!command?.autocomplete) return;
+      try {
+        await command.autocomplete(interaction);
+      } catch (err) {
+        logger.warn(`[autocomplete] /${interaction.commandName} : ${err.message}`);
+      }
+      return;
+    }
+
     // ── Commandes slash ──────────────────────────────────────────────────────
     if (interaction.isChatInputCommand()) {
       const command = client.commands.get(interaction.commandName);
@@ -34,7 +46,7 @@ export default {
       }
     }
 
-    // ── Boutons & modals (jeux, giveaways, /config reset, etc.) ──────────────
+    // ── Boutons & modals ─────────────────────────────────────────────────────
     if (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu()) {
       let handler = client.interactionHandlers?.get(interaction.customId);
       if (!handler && client.interactionHandlers) {

@@ -3,7 +3,7 @@ import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } from 'discord.js';
-import { incrementWin } from '../../database/repositories/StatsRepository.js';
+import { incrementWin } from '../../../database/repositories/StatsRepository.js';
 
 const activeLiars = new Map();
 
