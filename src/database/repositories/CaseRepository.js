@@ -31,17 +31,21 @@ export const createCase = db.transaction(({ guildId, userId, type, reason, moder
   return db.prepare('SELECT * FROM cases WHERE guild_id = ? AND case_id = ?').get(guildId, caseId);
 });
 
+// `created_at` a une résolution d'1 seconde — on trie aussi par id DESC pour
+// garantir un ordre déterministe même sous inserts très rapprochés.
+const ORDER_RECENT = 'ORDER BY created_at DESC, id DESC';
+
 /** Récupère tous les cas d'un utilisateur sur un serveur. */
 export function getCasesForUser(guildId, userId) {
   return db.prepare(
-    'SELECT * FROM cases WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC'
+    `SELECT * FROM cases WHERE guild_id = ? AND user_id = ? ${ORDER_RECENT}`
   ).all(guildId, userId);
 }
 
 /** Récupère tous les cas d'un serveur (récents en premier). */
 export function getAllCases(guildId, { limit = 200 } = {}) {
   return db.prepare(
-    'SELECT * FROM cases WHERE guild_id = ? ORDER BY created_at DESC LIMIT ?'
+    `SELECT * FROM cases WHERE guild_id = ? ${ORDER_RECENT} LIMIT ?`
   ).all(guildId, limit);
 }
 

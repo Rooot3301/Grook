@@ -14,14 +14,14 @@ export function createWarn({ guildId, userId, reason, moderatorId }) {
 /** Récupère tous les avertissements d'un utilisateur sur un serveur. */
 export function getWarnsForUser(guildId, userId) {
   return db.prepare(
-    'SELECT * FROM warnings WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC'
+    'SELECT * FROM warnings WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC, id DESC'
   ).all(guildId, userId);
 }
 
 /** Récupère tous les avertissements d'un serveur (récents en premier). */
 export function getWarnsForGuild(guildId, { limit = 200 } = {}) {
   return db.prepare(
-    'SELECT * FROM warnings WHERE guild_id = ? ORDER BY created_at DESC LIMIT ?'
+    'SELECT * FROM warnings WHERE guild_id = ? ORDER BY created_at DESC, id DESC LIMIT ?'
   ).all(guildId, limit);
 }
 
