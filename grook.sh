@@ -109,6 +109,42 @@ cmd_install() {
   command -v npm &>/dev/null || die "npm introuvable."
   ok "Node $(node -v) · npm $(npm -v)"
 
+  # ── Outils de build natif (nécessaires si prebuilt-install échoue) ────────
+  local missing=()
+  command -v make    &>/dev/null || missing+=("make")
+  command -v g++     &>/dev/null || missing+=("g++")
+  command -v python3 &>/dev/null || missing+=("python3")
+  if (( ${#missing[@]} > 0 )); then
+    warn "Outils de build manquants : ${missing[*]}"
+    if command -v apt-get &>/dev/null; then
+      local do_apt=0
+      if (( unattended )); then do_apt=1
+      else
+        read -r -p "  Installer build-essential + python3 via apt maintenant ? [Y/n] " ans
+        [[ -z "$ans" || "$ans" =~ ^[Yy] ]] && do_apt=1
+      fi
+      if (( do_apt )); then
+        info "apt-get install -y build-essential python3 …"
+        if apt-get update -qq && apt-get install -y build-essential python3 &>/tmp/grook_apt.log; then
+          ok "Outils de build installés."
+        else
+          tail -20 /tmp/grook_apt.log
+          die "Installation apt échouée — installe manuellement puis relance."
+        fi
+      else
+        die "Sans les outils de build, better-sqlite3 ne compilera pas."
+      fi
+    elif command -v dnf &>/dev/null; then
+      die "Sur RHEL/Fedora : sudo dnf groupinstall -y 'Development Tools' && sudo dnf install -y python3"
+    elif command -v pacman &>/dev/null; then
+      die "Sur Arch : sudo pacman -S --needed base-devel python"
+    else
+      die "Installe manuellement : make, g++, python3 (nécessaires pour compiler better-sqlite3)."
+    fi
+  else
+    ok "Build tools : make · g++ · python3"
+  fi
+
   # ── PM2 : installation auto si absent ──────────────────────────────────────
   if has_pm2; then
     ok "PM2 $(pm2 --version)"
