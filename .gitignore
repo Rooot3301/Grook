@@ -1,9 +1,13 @@
 node_modules/
 .env
+.env.local
 data/
 src/data/
-.DS_Store
+backups/
 logs/
+*.log
 *.db
 *.db-wal
 *.db-shm
+.grook.pid
+.DS_Store

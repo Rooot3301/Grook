@@ -20,7 +20,7 @@ export async function execute(interaction, client) {
     .setColor(COLORS.INFO)
     .setThumbnail(client.user.displayAvatarURL())
     .setDescription('Toutes les commandes disponibles, organisées par catégorie.')
-    .setFooter({ text: `${client.guilds.cache.size} serveur(s) · /config pour la configuration · /credit pour les infos` })
+    .setFooter({ text: `${client.guilds.cache.size} serveur(s) · /config pour la configuration · /botinfo pour les infos` })
     .setTimestamp();
 
   for (const [category, cmds] of client.commandCategories) {

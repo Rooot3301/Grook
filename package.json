@@ -1,7 +1,7 @@
 {
-  "name": "grook-bot",
-  "version": "2.1.1",
-  "description": "Bot Discord multifonctions : modération, mini-jeux et easter eggs inspiré par Grook.",
+  "name": "grook",
+  "version": "2.2.0",
+  "description": "Bot Discord multifonctions : modération, mini-jeux et fun.",
   "type": "module",
   "main": "src/index.js",
   "engines": {
@@ -11,9 +11,17 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js"
   },
-  "keywords": ["discord", "bot", "modération", "jeux", "fun"],
-  "author": "Root3301",
+  "keywords": ["discord", "bot", "moderation", "games", "fun"],
+  "author": "Rooot3301",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rooot3301/Grook.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Rooot3301/Grook/issues"
+  },
+  "homepage": "https://github.com/Rooot3301/Grook",
   "dependencies": {
     "better-sqlite3": "^9.4.3",
     "discord.js": "^14.13.0",
