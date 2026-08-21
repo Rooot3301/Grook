@@ -321,7 +321,18 @@ cmd_backup() {
   local ts dest
   ts=$(date +"%Y%m%d-%H%M%S")
   dest="${BACKUP_DIR}/grook-${ts}.db"
-  cp "$DB_FILE" "$dest"
+
+  # sqlite3 CLI .backup = snapshot atomique (gère le WAL correctement).
+  # Fallback sur cp si sqlite3 n'est pas installé (moins fiable pendant écriture).
+  if command -v sqlite3 &>/dev/null; then
+    sqlite3 "$DB_FILE" ".backup '$dest'" 2>/dev/null || {
+      warn "sqlite3 backup a échoué — fallback cp"
+      cp "$DB_FILE" "$dest"
+    }
+  else
+    [[ -z "$quiet" ]] && warn "sqlite3 CLI absent (apt install sqlite3) — fallback cp non atomique."
+    cp "$DB_FILE" "$dest"
+  fi
 
   # Rotation
   local count; count=$(ls -1 "${BACKUP_DIR}"/grook-*.db 2>/dev/null | wc -l)

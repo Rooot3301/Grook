@@ -1,21 +1,19 @@
 import { EmbedBuilder } from 'discord.js';
 import { getPendingReminders, removeReminder } from '../database/repositories/ReminderRepository.js';
 import { COLORS } from '../utils/embeds.js';
+import { safeSetTimeout } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
 
-// Map<reminderId, timeoutId>  — pour annulation si besoin
-const scheduled = new Map();
+const scheduled = new Map(); // reminderId -> handle { cancel() }
 
 /**
- * Planifie le déclenchement d'un rappel.
- * Appelé au démarrage (pour les rappels persistés) et à chaque /remind.
+ * Planifie le déclenchement d'un rappel via safeSetTimeout
+ * (compatible avec les délais > 24 jours).
  */
 export function scheduleReminder(client, reminder) {
-  const now     = Date.now();
-  const firesMs = reminder.fires_at * 1000;
-  const delay   = Math.max(0, firesMs - now);
+  const delay = Math.max(0, reminder.fires_at * 1000 - Date.now());
 
-  const tid = setTimeout(async () => {
+  const handle = safeSetTimeout(delay, async () => {
     scheduled.delete(reminder.id);
     removeReminder(reminder.id);
 
@@ -27,7 +25,6 @@ export function scheduleReminder(client, reminder) {
         .setFooter({ text: `Rappel programmé le <t:${reminder.created_at}:F>` })
         .setTimestamp();
 
-      // Essaie d'envoyer dans le salon d'origine, sinon en DM
       const channel = client.channels.cache.get(reminder.channel_id);
       if (channel?.isTextBased()) {
         await channel.send({ content: `<@${reminder.user_id}>`, embeds: [embed] });
@@ -36,16 +33,15 @@ export function scheduleReminder(client, reminder) {
         await user?.send({ embeds: [embed] });
       }
     } catch (err) {
-      logger.warn(`[reminders] Impossible d'envoyer le rappel ${reminder.id} : ${err.message}`);
+      logger.warn(`[reminders] Envoi impossible pour ${reminder.id} : ${err.message}`);
     }
-  }, delay);
+  });
 
-  scheduled.set(reminder.id, tid);
+  scheduled.set(reminder.id, handle);
 }
 
 /**
  * Charge et planifie tous les rappels en attente depuis la DB.
- * À appeler une fois dans ready.js.
  */
 export function loadPendingReminders(client) {
   const pending = getPendingReminders();
@@ -54,10 +50,10 @@ export function loadPendingReminders(client) {
 }
 
 /**
- * Annule un rappel planifié (si l'utilisateur veut l'annuler via une commande future).
+ * Annule un rappel planifié.
  */
 export function cancelReminder(id) {
-  const tid = scheduled.get(id);
-  if (tid !== undefined) { clearTimeout(tid); scheduled.delete(id); }
+  scheduled.get(id)?.cancel();
+  scheduled.delete(id);
   removeReminder(id);
 }

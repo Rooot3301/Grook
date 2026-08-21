@@ -15,6 +15,33 @@ export function parseDuration(str) {
   return value * multipliers[match[2].toLowerCase()];
 }
 
+// setTimeout est un int32 signé : au-delà de ~24.8 jours, il déborde et se
+// déclenche immédiatement. Ce helper enchaîne des timers courts pour rester exact.
+const MAX_SAFE_TIMEOUT = 2_147_483_647;
+
+/**
+ * setTimeout qui tolère les délais > 24 jours (chaîne des timers).
+ * Retourne un handle { cancel() } utilisable pour annuler.
+ * @param {number} delayMs
+ * @param {() => void} callback
+ */
+export function safeSetTimeout(delayMs, callback) {
+  const handle = { cancelled: false, tid: null };
+  const schedule = (remaining) => {
+    if (handle.cancelled) return;
+    const step = Math.min(Math.max(0, remaining), MAX_SAFE_TIMEOUT);
+    handle.tid = setTimeout(() => {
+      if (handle.cancelled) return;
+      const next = remaining - step;
+      if (next <= 0) callback();
+      else schedule(next);
+    }, step);
+    handle.tid.unref?.();
+  };
+  schedule(delayMs);
+  return { cancel() { handle.cancelled = true; clearTimeout(handle.tid); } };
+}
+
 /**
  * Formate une durée en millisecondes en texte lisible.
  * @param {number} ms

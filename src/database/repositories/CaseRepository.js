@@ -1,23 +1,35 @@
 import db from '../index.js';
 
-function generateCaseId(guildId) {
-  const { c } = db.prepare('SELECT COUNT(*) AS c FROM cases WHERE guild_id = ?').get(guildId);
-  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  return `GRC-${date}-${String(c + 1).padStart(5, '0')}`;
-}
+const insertCounter = db.prepare('INSERT OR IGNORE INTO guild_counters (guild_id, next_case) VALUES (?, 1)');
+const getAndBumpSeq = db.prepare(`
+  UPDATE guild_counters
+  SET next_case = next_case + 1
+  WHERE guild_id = ?
+  RETURNING next_case - 1 AS seq
+`);
+const insertCase = db.prepare(`
+  INSERT INTO cases (case_id, guild_id, guild_seq, type, user_id, moderator_id, reason, expires_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`);
 
 /**
- * Crée un nouveau cas disciplinaire.
+ * Crée un cas disciplinaire.
+ *
+ * Génération atomique du case_id via une table de compteurs par guild
+ * (transaction serialisée) — pas de collision possible même sous charge.
+ *
  * @param {{ guildId, userId, type, reason, moderatorId, expiresAt? }} params
  */
-export function createCase({ guildId, userId, type, reason, moderatorId, expiresAt = null }) {
-  const caseId = generateCaseId(guildId);
-  const expiresAtUnix = expiresAt ? Math.floor(new Date(expiresAt).getTime() / 1000) : null;
-  db.prepare(
-    'INSERT INTO cases (case_id, guild_id, type, user_id, moderator_id, reason, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(caseId, guildId, type, userId, moderatorId, reason || 'Aucune raison', expiresAtUnix);
+export const createCase = db.transaction(({ guildId, userId, type, reason, moderatorId, expiresAt = null }) => {
+  insertCounter.run(guildId);
+  const { seq } = getAndBumpSeq.get(guildId);
+  const date    = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const caseId  = `GRC-${date}-${String(seq).padStart(5, '0')}`;
+  const expUnix = expiresAt ? Math.floor(new Date(expiresAt).getTime() / 1000) : null;
+
+  insertCase.run(caseId, guildId, seq, type, userId, moderatorId, reason || 'Aucune raison', expUnix);
   return db.prepare('SELECT * FROM cases WHERE guild_id = ? AND case_id = ?').get(guildId, caseId);
-}
+});
 
 /** Récupère tous les cas d'un utilisateur sur un serveur. */
 export function getCasesForUser(guildId, userId) {
@@ -26,16 +38,21 @@ export function getCasesForUser(guildId, userId) {
   ).all(guildId, userId);
 }
 
-/** Récupère tous les cas d'un serveur (les plus récents en premier). */
-export function getAllCases(guildId) {
+/** Récupère tous les cas d'un serveur (récents en premier). */
+export function getAllCases(guildId, { limit = 200 } = {}) {
   return db.prepare(
-    'SELECT * FROM cases WHERE guild_id = ? ORDER BY created_at DESC'
-  ).all(guildId);
+    'SELECT * FROM cases WHERE guild_id = ? ORDER BY created_at DESC LIMIT ?'
+  ).all(guildId, limit);
+}
+
+/** Récupère un cas par son ID. */
+export function getCase(guildId, caseId) {
+  return db.prepare('SELECT * FROM cases WHERE guild_id = ? AND case_id = ?').get(guildId, caseId);
 }
 
 /** Supprime un cas. Retourne le cas supprimé ou null. */
 export function removeCase(guildId, caseId) {
-  const existing = db.prepare('SELECT * FROM cases WHERE guild_id = ? AND case_id = ?').get(guildId, caseId);
+  const existing = getCase(guildId, caseId);
   if (!existing) return null;
   db.prepare('DELETE FROM cases WHERE guild_id = ? AND case_id = ?').run(guildId, caseId);
   return existing;

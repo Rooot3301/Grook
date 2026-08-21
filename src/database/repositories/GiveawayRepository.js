@@ -38,3 +38,20 @@ export function getGiveawaysForGuild(guildId, { includeEnded = true, limit = 50 
     'SELECT * FROM giveaways WHERE guild_id = ? AND ended = 0 ORDER BY ends_at ASC LIMIT ?'
   ).all(guildId, limit);
 }
+
+// ─── Participants (persistés — survivent au restart) ─────────────────────────
+
+export function addParticipant(giveawayId, userId) {
+  db.prepare('INSERT OR IGNORE INTO giveaway_participants (giveaway_id, user_id) VALUES (?, ?)')
+    .run(giveawayId, userId);
+}
+
+export function removeParticipant(giveawayId, userId) {
+  db.prepare('DELETE FROM giveaway_participants WHERE giveaway_id = ? AND user_id = ?')
+    .run(giveawayId, userId);
+}
+
+export function getParticipantIds(giveawayId) {
+  return db.prepare('SELECT user_id FROM giveaway_participants WHERE giveaway_id = ?')
+    .all(giveawayId).map(r => r.user_id);
+}

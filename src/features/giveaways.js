@@ -3,23 +3,24 @@ import {
   getActiveGiveaways,
   endGiveaway,
   getGiveaway,
+  addParticipant,
+  removeParticipant,
+  getParticipantIds,
 } from '../database/repositories/GiveawayRepository.js';
 import { COLORS } from '../utils/embeds.js';
+import { safeSetTimeout } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
 import { bus } from '../http/events.js';
 
 const GIVEAWAY_EMOJI = '🎉';
 
-/**
- * Construit l'embed d'un giveaway en cours.
- */
 export function buildGiveawayEmbed(giveaway, participantCount = 0) {
-  const endsAt = giveaway.ends_at; // unix seconds
+  const endsAt = giveaway.ends_at;
   return new EmbedBuilder()
     .setColor(COLORS.FUN)
     .setTitle(`${GIVEAWAY_EMOJI} GIVEAWAY — ${giveaway.prize}`)
     .setDescription(
-      `Cliquez sur **${GIVEAWAY_EMOJI} Participer** pour tenter votre chance !\n\n` +
+      `Clique sur **${GIVEAWAY_EMOJI} Participer** pour tenter ta chance !\n\n` +
       `**Fin :** <t:${endsAt}:R> (<t:${endsAt}:f>)\n` +
       `**Organisé par :** <@${giveaway.host_id}>\n` +
       `**Participants :** ${participantCount}`
@@ -28,9 +29,6 @@ export function buildGiveawayEmbed(giveaway, participantCount = 0) {
     .setTimestamp(endsAt * 1000);
 }
 
-/**
- * Construit l'embed d'un giveaway terminé.
- */
 export function buildEndedEmbed(giveaway, winner) {
   return new EmbedBuilder()
     .setColor(winner ? COLORS.SUCCESS : COLORS.NEUTRAL)
@@ -44,7 +42,6 @@ export function buildEndedEmbed(giveaway, winner) {
     .setTimestamp();
 }
 
-/** Bouton de participation (customId unique par giveaway) */
 export function giveawayRow(giveawayId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -55,44 +52,37 @@ export function giveawayRow(giveawayId) {
   );
 }
 
-/** Map<giveawayId, Set<userId>> — participants en mémoire */
-const participants = new Map();
+// Handles de timers actifs — évite le double-schedule d'un même giveaway.
+const schedules = new Map(); // giveawayId -> handle { cancel() }
 
-export function getParticipants(giveawayId) {
-  if (!participants.has(giveawayId)) participants.set(giveawayId, new Set());
-  return participants.get(giveawayId);
-}
-
-/**
- * Planifie un giveaway et retourne le timeout handle.
- * @param {import('discord.js').Client} client
- * @param {Object} giveaway  — row DB
- */
 export function scheduleGiveaway(client, giveaway) {
+  if (schedules.has(giveaway.id)) return schedules.get(giveaway.id);
+
   const delay = giveaway.ends_at * 1000 - Date.now();
   if (delay <= 0) {
-    // Déjà expiré — on le traite immédiatement
     setImmediate(() => finaliseGiveaway(client, giveaway.id));
     return null;
   }
 
-  const handle = setTimeout(() => finaliseGiveaway(client, giveaway.id), delay);
-  handle.unref?.(); // ne pas bloquer l'arrêt du process
+  const handle = safeSetTimeout(delay, () => {
+    schedules.delete(giveaway.id);
+    finaliseGiveaway(client, giveaway.id);
+  });
+  schedules.set(giveaway.id, handle);
   return handle;
 }
 
 /**
- * Tire un gagnant, met à jour le message et la DB.
+ * Tire un gagnant depuis les participants persistés, met à jour le message + la DB.
  */
 export async function finaliseGiveaway(client, giveawayId) {
   const giveaway = getGiveaway(giveawayId);
   if (!giveaway || giveaway.ended) return;
 
-  const pool = [...(getParticipants(giveawayId))];
+  const pool   = getParticipantIds(giveawayId);
   const winner = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
 
   endGiveaway(giveawayId, winner);
-  participants.delete(giveawayId);
 
   bus.publish('giveaway:ended', giveaway.guild_id, {
     id: giveawayId,
@@ -101,12 +91,8 @@ export async function finaliseGiveaway(client, giveawayId) {
     participants: pool.length,
   });
 
-  // Nettoyage du handler de bouton
-  if (client.interactionHandlers) {
-    client.interactionHandlers.delete(`giveaway_join_${giveawayId}`);
-  }
+  client.interactionHandlers?.delete(`giveaway_join_${giveawayId}`);
 
-  // Mise à jour du message Discord
   if (!giveaway.message_id || !giveaway.channel_id) return;
 
   try {
@@ -116,10 +102,7 @@ export async function finaliseGiveaway(client, giveawayId) {
     const msg = await channel.messages.fetch(giveaway.message_id).catch(() => null);
     if (!msg) return;
 
-    await msg.edit({
-      embeds: [buildEndedEmbed(giveaway, winner)],
-      components: [],
-    });
+    await msg.edit({ embeds: [buildEndedEmbed(giveaway, winner)], components: [] });
 
     if (winner) {
       await channel.send({
@@ -135,14 +118,37 @@ export async function finaliseGiveaway(client, giveawayId) {
 }
 
 /**
- * Recharge et planifie tous les giveaways actifs au démarrage.
- * @param {import('discord.js').Client} client
+ * Handler du bouton "Participer" — utilise la table `giveaway_participants`,
+ * donc survit au redémarrage.
+ */
+export function registerGiveawayButtonHandler(client, giveaway) {
+  client.interactionHandlers.set(`giveaway_join_${giveaway.id}`, async (btn) => {
+    const current = new Set(getParticipantIds(giveaway.id));
+    if (current.has(btn.user.id)) {
+      removeParticipant(giveaway.id, btn.user.id);
+      current.delete(btn.user.id);
+      await btn.reply({ content: '❌ Tu t\'es retiré du giveaway.', ephemeral: true });
+    } else {
+      addParticipant(giveaway.id, btn.user.id);
+      current.add(btn.user.id);
+      await btn.reply({ content: '✅ Tu participes au giveaway !', ephemeral: true });
+    }
+    try { await btn.message.edit({ embeds: [buildGiveawayEmbed(giveaway, current.size)] }); }
+    catch { /* message supprimé */ }
+  });
+}
+
+/**
+ * Recharge et planifie tous les giveaways actifs + ré-arme leurs boutons.
+ * Appelé une fois dans ready.js.
  */
 export function loadActiveGiveaways(client) {
   const active = getActiveGiveaways();
-  logger.info(`[giveaways] ${active.length} giveaway(s) actif(s) rechargé(s)`);
+  if (!active.length) return;
 
   for (const g of active) {
     scheduleGiveaway(client, g);
+    registerGiveawayButtonHandler(client, g);
   }
+  logger.info(`[giveaways] ${active.length} giveaway(s) rechargé(s) + boutons réarmés.`);
 }

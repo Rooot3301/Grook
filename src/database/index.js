@@ -32,16 +32,24 @@ db.exec(`
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     case_id      TEXT    NOT NULL,
     guild_id     TEXT    NOT NULL,
+    guild_seq    INTEGER NOT NULL DEFAULT 0,
     type         TEXT    NOT NULL,
     user_id      TEXT    NOT NULL,
     moderator_id TEXT    NOT NULL,
     reason       TEXT    DEFAULT 'Aucune raison',
     expires_at   INTEGER,
     created_at   INTEGER DEFAULT (unixepoch()),
-    UNIQUE(guild_id, case_id)
+    UNIQUE(guild_id, case_id),
+    UNIQUE(guild_id, guild_seq)
   );
   CREATE INDEX IF NOT EXISTS idx_cases_guild_user ON cases(guild_id, user_id);
   CREATE INDEX IF NOT EXISTS idx_cases_guild      ON cases(guild_id);
+
+  -- Compteur atomique par guild pour la génération sans collision des case_id.
+  CREATE TABLE IF NOT EXISTS guild_counters (
+    guild_id  TEXT PRIMARY KEY,
+    next_case INTEGER NOT NULL DEFAULT 1
+  );
 
   CREATE TABLE IF NOT EXISTS warnings (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -105,6 +113,13 @@ db.exec(`
     created_at INTEGER DEFAULT (unixepoch())
   );
   CREATE INDEX IF NOT EXISTS idx_giveaways_ends ON giveaways(ends_at, ended);
+
+  CREATE TABLE IF NOT EXISTS giveaway_participants (
+    giveaway_id INTEGER NOT NULL,
+    user_id     TEXT    NOT NULL,
+    PRIMARY KEY (giveaway_id, user_id),
+    FOREIGN KEY (giveaway_id) REFERENCES giveaways(id) ON DELETE CASCADE
+  );
 `);
 
 // Migration : supprime les anciennes colonnes egg_* si présentes (issu d'une DB pré-nettoyage)
@@ -114,6 +129,33 @@ for (const col of legacyEggCols) {
   if (existingCols.includes(col)) {
     db.exec(`ALTER TABLE guild_configs DROP COLUMN ${col}`);
   }
+}
+
+// Migration : cases.guild_seq (ajouté en 2.5). Backfill : recalcule depuis id.
+const caseCols = db.prepare("PRAGMA table_info(cases)").all().map(r => r.name);
+if (!caseCols.includes('guild_seq')) {
+  db.exec('ALTER TABLE cases ADD COLUMN guild_seq INTEGER NOT NULL DEFAULT 0');
+  db.exec(`
+    UPDATE cases SET guild_seq = (
+      SELECT COUNT(*) FROM cases c2
+      WHERE c2.guild_id = cases.guild_id AND c2.id <= cases.id
+    )
+  `);
+  // Alimente les compteurs pour éviter les collisions futures.
+  db.exec(`
+    INSERT OR REPLACE INTO guild_counters (guild_id, next_case)
+    SELECT guild_id, MAX(guild_seq) + 1 FROM cases GROUP BY guild_id
+  `);
+}
+
+/**
+ * Backup atomique de la DB vers `destPath`. Utilise l'API .backup() de
+ * better-sqlite3 — pas de copie brute d'un fichier WAL en cours d'écriture.
+ * @param {string} destPath
+ * @returns {Promise<void>}
+ */
+export function backupDatabase(destPath) {
+  return db.backup(destPath);
 }
 
 export default db;

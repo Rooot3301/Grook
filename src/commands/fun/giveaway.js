@@ -8,7 +8,7 @@ import {
   buildGiveawayEmbed,
   giveawayRow,
   scheduleGiveaway,
-  getParticipants,
+  registerGiveawayButtonHandler,
 } from '../../features/giveaways.js';
 import { errorEmbed } from '../../utils/embeds.js';
 
@@ -59,18 +59,5 @@ export async function execute(interaction) {
 
   const fullGiveaway = { ...giveaway, message_id: msg.id };
   scheduleGiveaway(interaction.client, fullGiveaway);
-
-  // Bouton de participation (perdu au redémarrage — feature à persister plus tard)
-  interaction.client.interactionHandlers.set(`giveaway_join_${giveaway.id}`, async (btn) => {
-    const pool = getParticipants(giveaway.id);
-    if (pool.has(btn.user.id)) {
-      pool.delete(btn.user.id);
-      await btn.reply({ content: '❌ Tu t\'es retiré du giveaway.', ephemeral: true });
-    } else {
-      pool.add(btn.user.id);
-      await btn.reply({ content: '✅ Tu participes au giveaway !', ephemeral: true });
-    }
-    try { await btn.message.edit({ embeds: [buildGiveawayEmbed(fullGiveaway, pool.size)] }); }
-    catch { /* message supprimé */ }
-  });
+  registerGiveawayButtonHandler(interaction.client, fullGiveaway);
 }

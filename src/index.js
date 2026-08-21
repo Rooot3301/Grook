@@ -61,6 +61,17 @@ async function shutdown(signal) {
 process.on('SIGINT',  () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-// Erreurs non gérées (évite les crashes silencieux)
-process.on('uncaughtException', err => logger.error('Exception non capturée :', err));
-process.on('unhandledRejection', reason => logger.warn('Promesse rejetée non gérée :', reason));
+// Erreurs non gérées — on log ET on tue le process : PM2 relance dans un état sain.
+// Continuer avec une erreur non-gérée = état incohérent (DB half-committed, sockets zombie…).
+process.on('uncaughtException', (err, origin) => {
+  logger.error(`[fatal] uncaughtException (${origin}) :`, err);
+  try { dashboard?.close(); } catch { /* ignore */ }
+  try { client.destroy(); } catch { /* ignore */ }
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  logger.error('[fatal] unhandledRejection :', reason);
+  try { dashboard?.close(); } catch { /* ignore */ }
+  try { client.destroy(); } catch { /* ignore */ }
+  process.exit(1);
+});
