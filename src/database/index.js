@@ -4,13 +4,17 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+// Path configurable via GROOK_DB_PATH (tests) — sinon data/grook.db.
+// GROOK_DB_PATH=':memory:' fonctionne aussi (utilisé par les tests unitaires).
+const DB_PATH = process.env.GROOK_DB_PATH ?? path.join(__dirname, '..', '..', 'data', 'grook.db');
+
+if (DB_PATH !== ':memory:') {
+  const DATA_DIR = path.dirname(DB_PATH);
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-const db = new Database(path.join(DATA_DIR, 'grook.db'));
+const db = new Database(DB_PATH);
 
 // Paramètres de performance recommandés
 db.pragma('journal_mode = WAL');

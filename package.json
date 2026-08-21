@@ -9,7 +9,9 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": ["discord", "bot", "moderation", "games", "fun"],
   "author": "Rooot3301",
@@ -22,6 +24,9 @@
     "url": "https://github.com/Rooot3301/Grook/issues"
   },
   "homepage": "https://github.com/Rooot3301/Grook",
+  "devDependencies": {
+    "vitest": "^2.1.4"
+  },
   "dependencies": {
     "@fastify/cookie": "^9.3.1",
     "@fastify/jwt": "^8.0.1",
