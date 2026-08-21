@@ -80,26 +80,85 @@ require_repo() {
 # ══════════════════════════════════════════════════════════════════════════════
 
 cmd_install() {
+  local unattended=0
+  for arg in "$@"; do
+    case "$arg" in
+      -y|--yes|--unattended) unattended=1 ;;
+    esac
+  done
+
   step "Prérequis"
   command -v node &>/dev/null || die "Node.js introuvable — installe Node ${MIN_NODE_MAJOR}+."
   local major; major=$(node -e "process.stdout.write(process.versions.node.split('.')[0])")
   (( major >= MIN_NODE_MAJOR )) || die "Node ${major} détecté — version ${MIN_NODE_MAJOR}+ requise."
   command -v npm &>/dev/null || die "npm introuvable."
   ok "Node $(node -v) · npm $(npm -v)"
-  has_pm2 && ok "PM2 $(pm2 --version)" || warn "PM2 non installé (recommandé : npm i -g pm2)."
 
-  step "Configuration"
-  if [[ ! -f ".env" && -f ".env.example" ]]; then
-    cp .env.example .env
-    warn ".env créé depuis .env.example — renseigne DISCORD_TOKEN."
+  # ── PM2 : installation auto si absent ──────────────────────────────────────
+  if has_pm2; then
+    ok "PM2 $(pm2 --version)"
   else
+    warn "PM2 non détecté."
+    local do_install=0
+    if (( unattended )); then do_install=1
+    else
+      read -r -p "  Installer PM2 globalement maintenant ? [Y/n] " ans
+      [[ -z "$ans" || "$ans" =~ ^[Yy] ]] && do_install=1
+    fi
+    if (( do_install )); then
+      info "npm install -g pm2 …"
+      if npm install -g pm2 >/dev/null 2>&1; then
+        ok "PM2 $(pm2 --version) installé."
+      else
+        warn "Échec de l'installation globale (permissions ?). Réessaie avec : sudo npm install -g pm2"
+      fi
+    fi
+  fi
+
+  # ── Configuration : .env + dossiers ───────────────────────────────────────
+  step "Configuration"
+  if [[ -f ".env" ]]; then
     info ".env déjà présent."
+  elif [[ -f ".env.example" ]]; then
+    cp .env.example .env
+    warn ".env créé depuis .env.example — renseigne DISCORD_TOKEN avant de démarrer."
+  else
+    warn ".env.example introuvable — crée .env manuellement."
   fi
   mkdir -p "$LOG_DIR" "$BACKUP_DIR" data
+  ok "Dossiers : $LOG_DIR / $BACKUP_DIR / data prêts."
 
-  step "Dépendances (npm ci --omit=dev)"
+  # ── Dépendances du bot ─────────────────────────────────────────────────────
+  step "Dépendances bot (npm ci --omit=dev)"
   npm ci --omit=dev
+  ok "Dépendances bot installées."
+
+  # ── Dashboard (optionnel — build si le dossier existe) ─────────────────────
+  if [[ -d "dashboard" && -f "dashboard/package.json" ]]; then
+    step "Dashboard web"
+    (cd dashboard && npm ci && npm run build) \
+      && ok "Dashboard buildé → dashboard/dist/" \
+      || warn "Build du dashboard échoué — le bot marchera sans, ou build à la main."
+  fi
+
+  # ── Persistance PM2 au reboot (Linux, best-effort) ─────────────────────────
+  if has_pm2 && [[ "$(uname -s)" == "Linux" ]]; then
+    step "Persistance PM2 au démarrage machine"
+    if pm2 startup 2>&1 | grep -q "sudo env"; then
+      warn "Copie et exécute la ligne 'sudo env PATH=...' affichée ci-dessus si tu veux que PM2 relance le bot au reboot."
+    else
+      ok "PM2 déjà configuré au boot (ou pas besoin sur ce système)."
+    fi
+  fi
+
+  echo
   ok "Installation terminée."
+  echo
+  printf "  ${BOLD}Prochaines étapes${NC}\n"
+  printf "    ${DIM}1.${NC} Renseigne DISCORD_TOKEN (et BOT_OWNER_ID) dans .env\n"
+  printf "    ${DIM}2.${NC} ${G}./grook.sh start${NC}\n"
+  printf "    ${DIM}3.${NC} ${G}./grook.sh logs${NC} pour vérifier le démarrage\n"
+  echo
 }
 
 cmd_start() {
@@ -308,7 +367,8 @@ cmd_help() {
   ${BOLD}grook.sh${NC} — administration de Grook (v$(get_version))
 
   ${BOLD}Cycle de vie${NC}
-    install          Installe les dépendances + crée .env / dossiers
+    install [-y]     One-shot : PM2 auto + .env + dossiers + deps bot + build
+                     dashboard + PM2 startup (-y : sans prompt)
     start            Démarre le bot (PM2 si dispo, sinon bare-node)
     stop             Arrête le bot
     restart          Redémarre
@@ -340,7 +400,7 @@ COMMAND="${1:-help}"
 shift || true
 
 case "$COMMAND" in
-  install)          cmd_install ;;
+  install)          cmd_install "$@" ;;
   start)            cmd_start ;;
   stop)             cmd_stop ;;
   restart)          cmd_restart ;;
