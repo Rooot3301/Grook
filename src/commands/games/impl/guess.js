@@ -1,13 +1,10 @@
-import { SlashCommandBuilder } from 'discord.js';
 import { incrementWin } from '../../../database/repositories/StatsRepository.js';
-
-export const data = new SlashCommandBuilder()
-  .setName('grookguess')
-  .setDescription('Devinez le nombre auquel pense Grook (avec un soupçon de mensonge).');
 
 export async function execute(interaction) {
   const target = Math.floor(Math.random() * 100) + 1;
-  await interaction.reply({ content: '🔢 Je pense à un nombre entre **1** et **100**… devinez ! Vous avez **60 secondes**.' });
+  await interaction.reply({
+    content: '🔢 Je pense à un nombre entre **1** et **100**. Devine — **60 secondes**.',
+  });
 
   let found = false;
   const filter    = m => !m.author.bot && /^\d+$/.test(m.content.trim());
@@ -20,20 +17,24 @@ export async function execute(interaction) {
     if (guess === target) {
       found = true;
       incrementWin(interaction.guild.id, msg.author.id, 'guess');
-      msg.reply({ content: `🎉 Bravo <@${msg.author.id}>, le nombre était bien **${target}** !`, allowedMentions: { users: [msg.author.id] } });
+      msg.reply({
+        content: `🎉 Bravo <@${msg.author.id}>, c'était bien **${target}** !`,
+        allowedMentions: { users: [msg.author.id], repliedUser: false },
+      });
       collector.stop('found');
-    } else {
-      // 10% de chance de mentir
-      const lie  = Math.random() < 0.1;
-      const real = guess < target ? 'Plus haut !' : 'Plus bas !';
-      const hint = lie ? (guess < target ? 'Plus bas !' : 'Plus haut !') : real;
-      msg.reply({ content: hint, allowedMentions: { users: [msg.author.id] } });
+      return;
     }
+
+    const hint = guess < target ? '⬆️ Plus haut !' : '⬇️ Plus bas !';
+    msg.reply({
+      content: hint,
+      allowedMentions: { users: [], repliedUser: false },
+    });
   });
 
-  collector.on('end', (_, reason) => {
+  collector.on('end', () => {
     if (!found) {
-      interaction.followUp({ content: `⏱️ Temps écoulé ! Le nombre était **${target}**.` });
+      interaction.followUp({ content: `⏱️ Temps écoulé — le nombre était **${target}**.` });
     }
   });
 }
