@@ -75,6 +75,21 @@ require_repo() {
   git rev-parse --git-dir &>/dev/null || die "Ce dossier n'est pas un dépôt git."
 }
 
+# npm ci d'abord (rapide, reproductible) ; si le lock est désync, fallback sur npm install.
+# À utiliser dans le dossier courant.
+npm_install_deps() {
+  local label="${1:-projet}"
+  if npm ci --omit=dev --no-audit --no-fund 2>&1 | tee /tmp/grook_npm.log | tail -30; then
+    return 0
+  fi
+  if grep -q "EUSAGE\|out of sync" /tmp/grook_npm.log 2>/dev/null; then
+    warn "Lockfile désync pour ${label} → fallback sur npm install."
+    npm install --omit=dev --no-audit --no-fund
+    return $?
+  fi
+  return 1
+}
+
 # ══════════════════════════════════════════════════════════════════════════════
 # COMMANDES
 # ══════════════════════════════════════════════════════════════════════════════
@@ -129,16 +144,22 @@ cmd_install() {
   ok "Dossiers : $LOG_DIR / $BACKUP_DIR / data prêts."
 
   # ── Dépendances du bot ─────────────────────────────────────────────────────
-  step "Dépendances bot (npm ci --omit=dev)"
-  npm ci --omit=dev
+  step "Dépendances bot"
+  npm_install_deps "bot" || die "Installation des dépendances bot échouée."
   ok "Dépendances bot installées."
 
   # ── Dashboard (optionnel — build si le dossier existe) ─────────────────────
   if [[ -d "dashboard" && -f "dashboard/package.json" ]]; then
     step "Dashboard web"
-    (cd dashboard && npm ci && npm run build) \
-      && ok "Dashboard buildé → dashboard/dist/" \
-      || warn "Build du dashboard échoué — le bot marchera sans, ou build à la main."
+    (
+      cd dashboard || exit 1
+      if ! npm ci --no-audit --no-fund 2>&1 | tail -20; then
+        warn "npm ci dashboard KO → fallback npm install."
+        npm install --no-audit --no-fund || exit 1
+      fi
+      npm run build
+    ) && ok "Dashboard buildé → dashboard/dist/" \
+      || warn "Build du dashboard échoué — le bot marchera sans, tu peux relancer à la main."
   fi
 
   # ── Persistance PM2 au reboot (Linux, best-effort) ─────────────────────────
@@ -319,11 +340,24 @@ cmd_update() {
   ver_after=$(get_version)
   ok "Nouveau HEAD : $(git rev-parse --short HEAD) (v${ver_after})"
 
-  step "Dépendances (npm ci --omit=dev)"
-  if ! npm ci --omit=dev; then
-    warn "npm ci a échoué — rollback en cours…"
+  step "Dépendances"
+  if ! npm_install_deps "bot"; then
+    warn "Installation des dépendances a échoué — rollback en cours…"
     _rollback "$before" "$ver_before"
-    die "Update annulé (npm ci)."
+    die "Update annulé (npm)."
+  fi
+
+  # Rebuild dashboard si présent
+  if [[ -d "dashboard" && -f "dashboard/package.json" ]]; then
+    step "Rebuild dashboard"
+    (
+      cd dashboard || exit 1
+      if ! npm ci --no-audit --no-fund 2>&1 | tail -10; then
+        npm install --no-audit --no-fund || exit 1
+      fi
+      npm run build
+    ) && ok "Dashboard rebuild OK." \
+      || warn "Rebuild dashboard échoué — le bot continue sans."
   fi
 
   step "Restart et healthcheck (${HEALTHCHECK_TIMEOUT}s)"
@@ -345,7 +379,7 @@ _rollback() {
   local target="$1" ver="$2"
   info "Rollback → $(git rev-parse --short "$target") (v${ver})"
   git reset --hard "$target" >/dev/null 2>&1 || { err "git reset a échoué — état incohérent."; return 1; }
-  npm ci --omit=dev >/dev/null 2>&1 || warn "npm ci du rollback a aussi échoué — état incertain."
+  npm_install_deps "rollback" >/dev/null 2>&1 || warn "Réinstall du rollback a aussi échoué — état incertain."
   cmd_restart || true
   if wait_online 15; then
     ok "Rollback OK — bot restauré à v${ver}."
