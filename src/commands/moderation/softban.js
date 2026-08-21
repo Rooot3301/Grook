@@ -1,11 +1,10 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { createCase } from '../../database/repositories/CaseRepository.js';
-import { logCase } from '../../features/modlogs.js';
-import { moderationEmbed } from '../../utils/embeds.js';
+import { runSanctionGuards, notifyTarget, finalizeSanction } from '../../utils/sanctions.js';
+import { logger } from '../../utils/logger.js';
 
 export const data = new SlashCommandBuilder()
   .setName('softban')
-  .setDescription('Ban + unban immédiat pour purger les messages d\'un membre (7 jours).')
+  .setDescription('Ban + unban immédiat pour purger 7 jours de messages.')
   .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
   .addUserOption(o => o.setName('user').setDescription('Utilisateur à softban').setRequired(true))
   .addStringOption(o => o.setName('reason').setDescription('Raison du softban').setRequired(false).setMaxLength(512));
@@ -14,33 +13,23 @@ export async function execute(interaction) {
   const target = interaction.options.getUser('user', true);
   const reason = interaction.options.getString('reason') || 'Aucune raison';
 
-  if (target.id === interaction.user.id)
-    return interaction.reply({ content: '❌ Vous ne pouvez pas vous softban vous-même.', ephemeral: true });
-  if (target.id === interaction.client.user.id)
-    return interaction.reply({ content: '❌ Je ne peux pas me softban moi-même.', ephemeral: true });
+  const guard = await runSanctionGuards(interaction, target, 'bannable');
+  if (!guard.ok) return;
 
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-  if (!member) return interaction.reply({ content: '❌ Utilisateur introuvable sur ce serveur.', ephemeral: true });
-  if (!member.bannable) return interaction.reply({ content: '❌ Je ne peux pas bannir cet utilisateur (rôle supérieur ou égal au mien).', ephemeral: true });
-  if (member.roles.highest.position >= interaction.member.roles.highest.position)
-    return interaction.reply({ content: '❌ Rôle égal ou supérieur au vôtre.', ephemeral: true });
-
-  await target.send(`🧹 Tu as été **softban** de **${interaction.guild.name}** (messages supprimés).\n> Raison : ${reason}`).catch(() => {});
-
-  // Ban 7 jours de messages puis unban immédiat
+  // Ban avec purge 7j puis unban immédiat. Si l'unban échoue, on prévient au moins.
   await interaction.guild.members.ban(target.id, { reason, deleteMessageSeconds: 7 * 24 * 60 * 60 });
-  await interaction.guild.members.unban(target.id, 'Softban — unban automatique');
+  try {
+    await interaction.guild.members.unban(target.id, 'Softban — unban automatique');
+  } catch (err) {
+    logger.error(`[softban] Unban automatique échoué pour ${target.id} : ${err.message}`);
+    return interaction.reply({
+      content: `⚠️ **${target.tag}** a été banni mais l'unban automatique a échoué. Débannis manuellement via \`/unban ${target.id}\`.`,
+      ephemeral: true,
+    });
+  }
+  notifyTarget(target, interaction.guild.name,
+    `🧹 Tu as été **softban** (messages 7 derniers jours supprimés).\n> Raison : ${reason}`);
 
-  const caseData = createCase({ guildId: interaction.guild.id, userId: target.id, type: 'SOFTBAN', reason, moderatorId: interaction.user.id });
-
-  await logCase(interaction.client, interaction.guild, {
-    action: 'SOFTBAN',
-    target,
-    moderator: interaction.user,
-    reason,
-    caseId: caseData.case_id,
-  });
-
-  const embed = moderationEmbed({ action: 'SOFTBAN', target, moderator: interaction.user, reason, caseId: caseData.case_id });
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  const { embed } = await finalizeSanction(interaction, { action: 'SOFTBAN', target, reason });
+  await interaction.reply({ embeds: [embed] });
 }

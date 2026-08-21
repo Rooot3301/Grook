@@ -1,14 +1,12 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { createWarn, getWarnsForUser } from '../../database/repositories/WarnRepository.js';
-import { createCase } from '../../database/repositories/CaseRepository.js';
-import { logCase } from '../../features/modlogs.js';
-import { moderationEmbed } from '../../utils/embeds.js';
+import { runSanctionGuards, notifyTarget, finalizeSanction } from '../../utils/sanctions.js';
 
-// Seuils : [nombre de warns, action automatique]
+// Seuils : à chaque palier atteint, escalade automatique
 const THRESHOLDS = [
-  { count: 7, action: 'ban',     label: 'Banni automatiquement (7 avertissements)' },
-  { count: 5, action: 'kick',    label: 'Expulsé automatiquement (5 avertissements)' },
-  { count: 3, action: 'mute_1h', label: 'Mute 1h automatiquement (3 avertissements)' },
+  { count: 7, action: 'BAN',  label: 'Banni automatiquement (7 avertissements)' },
+  { count: 5, action: 'KICK', label: 'Expulsé automatiquement (5 avertissements)' },
+  { count: 3, action: 'MUTE', label: 'Mute 1h automatiquement (3 avertissements)', muteMs: 60 * 60 * 1000 },
 ];
 
 export const data = new SlashCommandBuilder()
@@ -22,68 +20,49 @@ export async function execute(interaction) {
   const target = interaction.options.getUser('user', true);
   const reason = interaction.options.getString('reason') || 'Aucune raison';
 
-  if (target.id === interaction.user.id)
-    return interaction.reply({ content: '❌ Vous ne pouvez pas vous avertir vous-même.', ephemeral: true });
-  if (target.id === interaction.client.user.id)
-    return interaction.reply({ content: '❌ Je ne peux pas me warn moi-même.', ephemeral: true });
-
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-  if (!member) return interaction.reply({ content: '❌ Utilisateur introuvable.', ephemeral: true });
-
-  await target.send(`⚠️ Tu as reçu un **avertissement** dans **${interaction.guild.name}**.\n> Raison : ${reason}`).catch(() => {});
+  const guard = await runSanctionGuards(interaction, target, 'kickable');
+  if (!guard.ok) return;
 
   createWarn({ guildId: interaction.guild.id, userId: target.id, reason, moderatorId: interaction.user.id });
-  const caseData = createCase({ guildId: interaction.guild.id, userId: target.id, type: 'WARN', reason, moderatorId: interaction.user.id });
+  notifyTarget(target, interaction.guild.name, `⚠️ Tu as reçu un **avertissement**.\n> Raison : ${reason}`);
 
-  await logCase(interaction.client, interaction.guild, {
-    action: 'WARN',
-    target,
-    moderator: interaction.user,
-    reason,
-    caseId: caseData.case_id,
-  });
+  const warnCount = getWarnsForUser(interaction.guild.id, target.id).length;
 
-  const allWarns = getWarnsForUser(interaction.guild.id, target.id);
-  const warnCount = allWarns.length;
-
-  const embed = moderationEmbed({
-    action: 'WARN',
-    target,
-    moderator: interaction.user,
-    reason,
-    caseId: caseData.case_id,
+  const { embed } = await finalizeSanction(interaction, {
+    action: 'WARN', target, reason,
     extra: { '⚠️ Total warns': `${warnCount}` },
   });
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.reply({ embeds: [embed] });
 
-  // ─── Seuils automatiques ───────────────────────────────────────────────────
+  // ── Escalade automatique ─────────────────────────────────────────────────
   const threshold = THRESHOLDS.find(t => warnCount === t.count);
   if (!threshold) return;
 
   const botReason = `${threshold.label} · via /warn`;
+  const bot       = interaction.client.user;
 
-  if (threshold.action === 'ban' && member.bannable) {
-    await target.send(`🔨 Tu as été **banni** de **${interaction.guild.name}** (seuil automatique : 7 avertissements).`).catch(() => {});
-    await member.ban({ reason: botReason });
-    const autoCase = createCase({ guildId: interaction.guild.id, userId: target.id, type: 'BAN', reason: botReason, moderatorId: interaction.client.user.id });
-    await logCase(interaction.client, interaction.guild, { action: 'BAN', target, moderator: interaction.client.user, reason: botReason, caseId: autoCase.case_id });
+  // Escalade → fake une "interaction" minimaliste pour finalizeSanction (client = bot)
+  const escalate = async (action, extra, expiresAt) => finalizeSanction(
+    { client: interaction.client, guild: interaction.guild, user: bot },
+    { action, target, reason: botReason, extra, expiresAt },
+  );
+
+  if (threshold.action === 'BAN' && guard.member.bannable) {
+    notifyTarget(target, interaction.guild.name, `🔨 Tu as été **banni** (seuil automatique : 7 avertissements).`);
+    await guard.member.ban({ reason: botReason });
+    await escalate('BAN');
     return;
   }
-
-  if (threshold.action === 'kick' && member.kickable) {
-    await target.send(`👢 Tu as été **expulsé** de **${interaction.guild.name}** (seuil automatique : 5 avertissements).`).catch(() => {});
-    await member.kick(botReason);
-    const autoCase = createCase({ guildId: interaction.guild.id, userId: target.id, type: 'KICK', reason: botReason, moderatorId: interaction.client.user.id });
-    await logCase(interaction.client, interaction.guild, { action: 'KICK', target, moderator: interaction.client.user, reason: botReason, caseId: autoCase.case_id });
+  if (threshold.action === 'KICK' && guard.member.kickable) {
+    notifyTarget(target, interaction.guild.name, `👢 Tu as été **expulsé** (seuil automatique : 5 avertissements).`);
+    await guard.member.kick(botReason);
+    await escalate('KICK');
     return;
   }
-
-  if (threshold.action === 'mute_1h' && member.moderatable) {
-    const ms = 60 * 60 * 1000; // 1h
-    await target.send(`🔇 Tu as été **mute 1h** dans **${interaction.guild.name}** (seuil automatique : 3 avertissements).`).catch(() => {});
-    await member.timeout(ms, botReason);
-    const expiresAt = new Date(Date.now() + ms);
-    const autoCase = createCase({ guildId: interaction.guild.id, userId: target.id, type: 'MUTE', reason: botReason, moderatorId: interaction.client.user.id, expiresAt });
-    await logCase(interaction.client, interaction.guild, { action: 'MUTE', target, moderator: interaction.client.user, reason: botReason, caseId: autoCase.case_id, extra: { '⏱️ Durée': '1h' } });
+  if (threshold.action === 'MUTE' && guard.member.moderatable) {
+    notifyTarget(target, interaction.guild.name, `🔇 Tu as été **mute 1h** (seuil automatique : 3 avertissements).`);
+    await guard.member.timeout(threshold.muteMs, botReason);
+    const expiresAt = new Date(Date.now() + threshold.muteMs);
+    await escalate('MUTE', { '⏱️ Durée': '1h', '⏰ Expire': `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>` }, expiresAt);
   }
 }

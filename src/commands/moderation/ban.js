@@ -1,44 +1,29 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { createCase } from '../../database/repositories/CaseRepository.js';
-import { logCase } from '../../features/modlogs.js';
-import { moderationEmbed } from '../../utils/embeds.js';
+import { runSanctionGuards, notifyTarget, finalizeSanction } from '../../utils/sanctions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('ban')
   .setDescription('Bannir un utilisateur définitivement.')
   .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
   .addUserOption(o => o.setName('user').setDescription('Utilisateur à bannir').setRequired(true))
-  .addStringOption(o => o.setName('reason').setDescription('Raison du bannissement').setRequired(false).setMaxLength(512));
+  .addStringOption(o => o.setName('reason').setDescription('Raison du bannissement').setRequired(false).setMaxLength(512))
+  .addIntegerOption(o => o
+    .setName('purge')
+    .setDescription('Supprimer les messages des N derniers jours (0-7)')
+    .setMinValue(0).setMaxValue(7).setRequired(false));
 
 export async function execute(interaction) {
   const target = interaction.options.getUser('user', true);
   const reason = interaction.options.getString('reason') || 'Aucune raison';
+  const purge  = interaction.options.getInteger('purge') ?? 0;
 
-  if (target.id === interaction.user.id)
-    return interaction.reply({ content: '❌ Vous ne pouvez pas vous bannir vous-même.', ephemeral: true });
-  if (target.id === interaction.client.user.id)
-    return interaction.reply({ content: '❌ Je ne peux pas me bannir moi-même.', ephemeral: true });
+  const guard = await runSanctionGuards(interaction, target, 'bannable');
+  if (!guard.ok) return;
 
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+  await guard.member.ban({ reason, deleteMessageSeconds: purge * 24 * 60 * 60 });
+  notifyTarget(target, interaction.guild.name, `🔨 Tu as été **banni**.\n> Raison : ${reason}`);
 
-  if (!member) return interaction.reply({ content: '❌ Utilisateur introuvable sur ce serveur.', ephemeral: true });
-  if (!member.bannable) return interaction.reply({ content: '❌ Je ne peux pas bannir cet utilisateur (rôle supérieur ou égal au mien).', ephemeral: true });
-  if (member.roles.highest.position >= interaction.member.roles.highest.position)
-    return interaction.reply({ content: '❌ Vous ne pouvez pas bannir un membre avec un rôle égal ou supérieur au vôtre.', ephemeral: true });
-
-  await target.send(`🔨 Tu as été **banni** de **${interaction.guild.name}**.\n> Raison : ${reason}`).catch(() => {});
-
-  await member.ban({ reason });
-  const caseData = createCase({ guildId: interaction.guild.id, userId: target.id, type: 'BAN', reason, moderatorId: interaction.user.id });
-
-  await logCase(interaction.client, interaction.guild, {
-    action: 'BAN',
-    target,
-    moderator: interaction.user,
-    reason,
-    caseId: caseData.case_id,
-  });
-
-  const embed = moderationEmbed({ action: 'BAN', target, moderator: interaction.user, reason, caseId: caseData.case_id });
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  const extra = purge > 0 ? { '🧹 Messages purgés': `${purge} jour(s)` } : undefined;
+  const { embed } = await finalizeSanction(interaction, { action: 'BAN', target, reason, extra });
+  await interaction.reply({ embeds: [embed] });
 }

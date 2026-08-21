@@ -49,14 +49,23 @@ export function infoEmbed(title, description) {
 // ─── Embed de modération ─────────────────────────────────────────────────────
 
 const ACTION_META = {
-  BAN:     { color: COLORS.BAN,     emoji: '🔨', label: 'Banni'    },
-  KICK:    { color: COLORS.KICK,    emoji: '👢', label: 'Expulsé'  },
-  MUTE:    { color: COLORS.MUTE,    emoji: '🔇', label: 'Mute'     },
-  UNMUTE:  { color: COLORS.UNMUTE,  emoji: '🔊', label: 'Démute'   },
-  WARN:    { color: COLORS.WARN,    emoji: '⚠️', label: 'Averti'   },
-  UNBAN:   { color: COLORS.UNBAN,   emoji: '🔓', label: 'Débanni'  },
-  TEMPBAN: { color: COLORS.TEMPBAN, emoji: '⏳', label: 'Temp-ban' },
-  SOFTBAN: { color: COLORS.SOFTBAN, emoji: '🧹', label: 'Soft-ban' },
+  BAN:          { color: COLORS.BAN,     emoji: '🔨', label: 'Banni'    },
+  KICK:         { color: COLORS.KICK,    emoji: '👢', label: 'Expulsé'  },
+  MUTE:         { color: COLORS.MUTE,    emoji: '🔇', label: 'Mute'     },
+  UNMUTE:       { color: COLORS.UNMUTE,  emoji: '🔊', label: 'Démute'   },
+  WARN:         { color: COLORS.WARN,    emoji: '⚠️', label: 'Averti'   },
+  UNBAN:        { color: COLORS.UNBAN,   emoji: '🔓', label: 'Débanni'  },
+  TEMPBAN:      { color: COLORS.TEMPBAN, emoji: '⏳', label: 'Temp-ban' },
+  SOFTBAN:      { color: COLORS.SOFTBAN, emoji: '🧹', label: 'Soft-ban' },
+
+  // Actions canal (pas de "target" utilisateur — la cible est un salon)
+  LOCK:         { color: COLORS.NEUTRAL, emoji: '🔒', label: 'Salon verrouillé'   },
+  UNLOCK:       { color: COLORS.NEUTRAL, emoji: '🔓', label: 'Salon déverrouillé' },
+  SLOWMODE:     { color: COLORS.NEUTRAL, emoji: '🐌', label: 'Slowmode modifié'  },
+  CLEAR:        { color: COLORS.NEUTRAL, emoji: '🧹', label: 'Messages purgés'   },
+  PANIC:        { color: COLORS.ERROR,   emoji: '🚨', label: 'Mode panique'      },
+  NICK:         { color: COLORS.NEUTRAL, emoji: '✏️', label: 'Pseudo modifié'   },
+  CASE_REMOVED: { color: COLORS.NEUTRAL, emoji: '🗑️', label: 'Casier retiré'    },
 };
 
 /**

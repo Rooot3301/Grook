@@ -73,8 +73,8 @@ Le script d'admin **`grook.sh`** offre un cycle de vie propre :
 ### 🛡️ Modération (`src/commands/moderation/`)
 `/ban` · `/kick` · `/mute` · `/unmute` · `/warn` · `/warnings` · `/tempban` · `/unban`
 `/softban` · `/clear` · `/lock` · `/unlock` · `/slowmode` · `/nick` · `/panic`
-`/announce` · `/report` · `/modlogs` · `/serverinfo` · `/userinfo`
-`/case` · `/cases` · `/case-remove`
+`/announce` · `/report` · `/serverinfo` · `/userinfo`
+`/case view` · `/case list` · `/case remove`
 
 - Permissions Discord natives requises (ban, kick, gérer les messages, etc.)
 - Toutes les sanctions sont enregistrées dans un **casier** persistant par serveur

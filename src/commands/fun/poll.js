@@ -4,12 +4,14 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  PermissionFlagsBits,
 } from 'discord.js';
 import { COLORS } from '../../utils/embeds.js';
 
 export const data = new SlashCommandBuilder()
   .setName('poll')
   .setDescription('Créer un sondage avec jusqu\'à 4 options.')
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
   .addStringOption(o => o.setName('question').setDescription('Question du sondage').setRequired(true))
   .addStringOption(o => o.setName('option1').setDescription('Option 1').setRequired(true))
   .addStringOption(o => o.setName('option2').setDescription('Option 2').setRequired(true))

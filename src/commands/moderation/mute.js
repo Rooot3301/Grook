@@ -1,10 +1,8 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { parseDuration, formatDuration } from '../../utils/time.js';
-import { createCase } from '../../database/repositories/CaseRepository.js';
-import { logCase } from '../../features/modlogs.js';
-import { moderationEmbed } from '../../utils/embeds.js';
+import { runSanctionGuards, notifyTarget, finalizeSanction } from '../../utils/sanctions.js';
 
-const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000; // 28 jours (limite Discord)
+const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000; // limite Discord
 
 export const data = new SlashCommandBuilder()
   .setName('mute')
@@ -20,43 +18,26 @@ export async function execute(interaction) {
   const reason      = interaction.options.getString('reason') || 'Aucune raison';
   const ms          = parseDuration(durationStr);
 
-  if (target.id === interaction.user.id)
-    return interaction.reply({ content: '❌ Vous ne pouvez pas vous mute vous-même.', ephemeral: true });
-  if (target.id === interaction.client.user.id)
-    return interaction.reply({ content: '❌ Je ne peux pas me mute moi-même.', ephemeral: true });
-
   if (!ms) return interaction.reply({ content: '❌ Durée invalide. Exemples : `10m`, `2h`, `1d`, `1w`.', ephemeral: true });
   if (ms > MAX_TIMEOUT_MS) return interaction.reply({ content: '❌ Durée maximale : 28 jours.', ephemeral: true });
 
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-  if (!member) return interaction.reply({ content: '❌ Utilisateur introuvable.', ephemeral: true });
-  if (!member.moderatable) return interaction.reply({ content: '❌ Je ne peux pas mute cet utilisateur (rôle supérieur ou égal au mien).', ephemeral: true });
-  if (member.roles.highest.position >= interaction.member.roles.highest.position)
-    return interaction.reply({ content: '❌ Rôle égal ou supérieur au vôtre.', ephemeral: true });
-
-  await target.send(`🔇 Tu as été **mute** dans **${interaction.guild.name}** pendant **${durationStr}**.\n> Raison : ${reason}`).catch(() => {});
+  const guard = await runSanctionGuards(interaction, target, 'moderatable');
+  if (!guard.ok) return;
 
   const expiresAt = new Date(Date.now() + ms);
-  await member.timeout(ms, reason);
-  const caseData = createCase({ guildId: interaction.guild.id, userId: target.id, type: 'MUTE', reason, moderatorId: interaction.user.id, expiresAt });
-
   const formatted = formatDuration(ms);
-  await logCase(interaction.client, interaction.guild, {
-    action: 'MUTE',
-    target,
-    moderator: interaction.user,
-    reason,
-    caseId: caseData.case_id,
-    extra: { '⏱️ Durée': formatted, '⏰ Expire': `<t:${Math.floor(expiresAt / 1000)}:R>` },
-  });
 
-  const embed = moderationEmbed({
-    action: 'MUTE',
-    target,
-    moderator: interaction.user,
-    reason,
-    caseId: caseData.case_id,
-    extra: { '⏱️ Durée': formatted, '⏰ Expire': `<t:${Math.floor(expiresAt / 1000)}:R>` },
+  await guard.member.timeout(ms, reason);
+  notifyTarget(target, interaction.guild.name,
+    `🔇 Tu as été **mute** pendant **${formatted}**.\n> Raison : ${reason}`);
+
+  const extra = {
+    '⏱️ Durée':  formatted,
+    '⏰ Expire': `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>`,
+  };
+
+  const { embed } = await finalizeSanction(interaction, {
+    action: 'MUTE', target, reason, extra, expiresAt,
   });
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.reply({ embeds: [embed] });
 }

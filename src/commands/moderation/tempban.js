@@ -1,9 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { parseDuration, formatDuration } from '../../utils/time.js';
-import { createCase } from '../../database/repositories/CaseRepository.js';
 import { createTempBan } from '../../database/repositories/TempBanRepository.js';
-import { logCase } from '../../features/modlogs.js';
-import { moderationEmbed } from '../../utils/embeds.js';
+import { runSanctionGuards, notifyTarget, finalizeSanction } from '../../utils/sanctions.js';
 
 const MAX_DURATION_MS = 365 * 24 * 60 * 60 * 1000; // 1 an max
 
@@ -21,53 +19,33 @@ export async function execute(interaction) {
   const reason      = interaction.options.getString('reason') || 'Aucune raison';
   const ms          = parseDuration(durationStr);
 
-  if (target.id === interaction.user.id)
-    return interaction.reply({ content: '❌ Vous ne pouvez pas vous bannir vous-même.', ephemeral: true });
-  if (target.id === interaction.client.user.id)
-    return interaction.reply({ content: '❌ Je ne peux pas me bannir moi-même.', ephemeral: true });
-
   if (!ms) return interaction.reply({ content: '❌ Durée invalide. Exemples : `1h`, `3d`, `2w`.', ephemeral: true });
   if (ms > MAX_DURATION_MS) return interaction.reply({ content: '❌ Durée maximale : 1 an.', ephemeral: true });
 
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-  if (!member) return interaction.reply({ content: '❌ Utilisateur introuvable sur ce serveur.', ephemeral: true });
-  if (!member.bannable) return interaction.reply({ content: '❌ Je ne peux pas bannir cet utilisateur (rôle supérieur ou égal au mien).', ephemeral: true });
-  if (member.roles.highest.position >= interaction.member.roles.highest.position)
-    return interaction.reply({ content: '❌ Rôle égal ou supérieur au vôtre.', ephemeral: true });
+  const guard = await runSanctionGuards(interaction, target, 'bannable');
+  if (!guard.ok) return;
 
-  const expiresAt = Date.now() + ms;
+  const expiresAt = new Date(Date.now() + ms);
   const formatted = formatDuration(ms);
 
-  await target.send(`⏳ Tu as été **temp-banni** de **${interaction.guild.name}** pendant **${formatted}**.\n> Raison : ${reason}`).catch(() => {});
-
-  await member.ban({ reason: `[TempBan ${formatted}] ${reason}` });
-  createTempBan({ guildId: interaction.guild.id, userId: target.id, moderatorId: interaction.user.id, reason, expiresAt });
-
-  const caseData = createCase({
+  await guard.member.ban({ reason: `[TempBan ${formatted}] ${reason}` });
+  createTempBan({
     guildId: interaction.guild.id,
     userId: target.id,
-    type: 'TEMPBAN',
-    reason,
     moderatorId: interaction.user.id,
-    expiresAt: new Date(expiresAt),
-  });
-
-  await logCase(interaction.client, interaction.guild, {
-    action: 'TEMPBAN',
-    target,
-    moderator: interaction.user,
     reason,
-    caseId: caseData.case_id,
-    extra: { '⏱️ Durée': formatted, '⏰ Expire': `<t:${Math.floor(expiresAt / 1000)}:R>` },
+    expiresAt: expiresAt.getTime(),
   });
+  notifyTarget(target, interaction.guild.name,
+    `⏳ Tu as été **temp-banni** pendant **${formatted}**.\n> Raison : ${reason}`);
 
-  const embed = moderationEmbed({
-    action: 'TEMPBAN',
-    target,
-    moderator: interaction.user,
-    reason,
-    caseId: caseData.case_id,
-    extra: { '⏱️ Durée': formatted, '⏰ Expire': `<t:${Math.floor(expiresAt / 1000)}:R>` },
+  const extra = {
+    '⏱️ Durée':  formatted,
+    '⏰ Expire': `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>`,
+  };
+
+  const { embed } = await finalizeSanction(interaction, {
+    action: 'TEMPBAN', target, reason, extra, expiresAt,
   });
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await interaction.reply({ embeds: [embed] });
 }

@@ -1,7 +1,5 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { createCase } from '../../database/repositories/CaseRepository.js';
-import { logCase } from '../../features/modlogs.js';
-import { moderationEmbed } from '../../utils/embeds.js';
+import { runSanctionGuards, notifyTarget, finalizeSanction } from '../../utils/sanctions.js';
 
 export const data = new SlashCommandBuilder()
   .setName('kick')
@@ -14,30 +12,12 @@ export async function execute(interaction) {
   const target = interaction.options.getUser('user', true);
   const reason = interaction.options.getString('reason') || 'Aucune raison';
 
-  if (target.id === interaction.user.id)
-    return interaction.reply({ content: '❌ Vous ne pouvez pas vous expulser vous-même.', ephemeral: true });
-  if (target.id === interaction.client.user.id)
-    return interaction.reply({ content: '❌ Je ne peux pas me kick moi-même.', ephemeral: true });
+  const guard = await runSanctionGuards(interaction, target, 'kickable');
+  if (!guard.ok) return;
 
-  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-  if (!member) return interaction.reply({ content: '❌ Utilisateur introuvable.', ephemeral: true });
-  if (!member.kickable) return interaction.reply({ content: '❌ Je ne peux pas expulser cet utilisateur (rôle supérieur ou égal au mien).', ephemeral: true });
-  if (member.roles.highest.position >= interaction.member.roles.highest.position)
-    return interaction.reply({ content: '❌ Rôle égal ou supérieur au vôtre.', ephemeral: true });
+  await guard.member.kick(reason);
+  notifyTarget(target, interaction.guild.name, `👢 Tu as été **expulsé**.\n> Raison : ${reason}`);
 
-  await target.send(`👢 Tu as été **expulsé** de **${interaction.guild.name}**.\n> Raison : ${reason}`).catch(() => {});
-
-  await member.kick(reason);
-  const caseData = createCase({ guildId: interaction.guild.id, userId: target.id, type: 'KICK', reason, moderatorId: interaction.user.id });
-
-  await logCase(interaction.client, interaction.guild, {
-    action: 'KICK',
-    target,
-    moderator: interaction.user,
-    reason,
-    caseId: caseData.case_id,
-  });
-
-  const embed = moderationEmbed({ action: 'KICK', target, moderator: interaction.user, reason, caseId: caseData.case_id });
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  const { embed } = await finalizeSanction(interaction, { action: 'KICK', target, reason });
+  await interaction.reply({ embeds: [embed] });
 }

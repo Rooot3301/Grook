@@ -10,9 +10,9 @@ export const data = new SlashCommandBuilder()
      .setRequired(true));
 
 export async function execute(interaction) {
-    await interaction.deferReply();
+  await interaction.deferReply({ ephemeral: true });
 
-    const raw = interaction.options.getString('cible').replace(/[<@!>]/g, '').trim();
+  const raw = interaction.options.getString('cible').replace(/[<@!>]/g, '').trim();
 
     if (!/^\d{17,20}$/.test(raw)) {
       return interaction.editReply({ embeds: [errorEmbed('ID Discord invalide. Fournissez un identifiant numérique ou une mention @user.')] });
