@@ -27,3 +27,14 @@ export function getGiveawayByMessage(messageId) {
 export function getGiveaway(id) {
   return db.prepare('SELECT * FROM giveaways WHERE id = ?').get(id);
 }
+
+export function getGiveawaysForGuild(guildId, { includeEnded = true, limit = 50 } = {}) {
+  if (includeEnded) {
+    return db.prepare(
+      'SELECT * FROM giveaways WHERE guild_id = ? ORDER BY ends_at DESC LIMIT ?'
+    ).all(guildId, limit);
+  }
+  return db.prepare(
+    'SELECT * FROM giveaways WHERE guild_id = ? AND ended = 0 ORDER BY ends_at ASC LIMIT ?'
+  ).all(guildId, limit);
+}

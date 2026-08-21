@@ -30,3 +30,10 @@ export function getExpiredTempBans() {
 export function getTempBan(guildId, userId) {
   return db.prepare('SELECT * FROM temp_bans WHERE guild_id = ? AND user_id = ?').get(guildId, userId);
 }
+
+/**
+ * Retourne tous les temp-bans actifs d'un serveur (les plus proches en premier).
+ */
+export function getTempBansForGuild(guildId) {
+  return db.prepare('SELECT * FROM temp_bans WHERE guild_id = ? ORDER BY expires_at ASC').all(guildId);
+}

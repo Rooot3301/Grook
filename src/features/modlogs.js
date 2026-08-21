@@ -1,6 +1,7 @@
 import { getGuildConfig } from '../database/repositories/GuildConfigRepository.js';
 import { modlogEmbed } from '../utils/embeds.js';
 import { logger } from '../utils/logger.js';
+import { bus } from '../http/events.js';
 
 /**
  * Envoie un embed de log dans le salon configuré pour la modération.
@@ -16,6 +17,15 @@ import { logger } from '../utils/logger.js';
  * @param {Object} [opts.extra]      Champs additionnels { nom: valeur }
  */
 export async function logCase(client, guild, { action, target, moderator, reason, caseId, extra }) {
+  bus.publish('case:created', guild.id, {
+    action,
+    caseId,
+    target:    { id: target?.id, tag: target?.tag },
+    moderator: { id: moderator?.id, tag: moderator?.tag },
+    reason,
+    extra,
+  });
+
   const config = getGuildConfig(guild.id);
   if (!config.modlogs_channel_id) return;
 

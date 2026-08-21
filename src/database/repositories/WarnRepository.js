@@ -17,3 +17,18 @@ export function getWarnsForUser(guildId, userId) {
     'SELECT * FROM warnings WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC'
   ).all(guildId, userId);
 }
+
+/** Récupère tous les avertissements d'un serveur (récents en premier). */
+export function getWarnsForGuild(guildId, { limit = 200 } = {}) {
+  return db.prepare(
+    'SELECT * FROM warnings WHERE guild_id = ? ORDER BY created_at DESC LIMIT ?'
+  ).all(guildId, limit);
+}
+
+/** Supprime un avertissement par ID. */
+export function removeWarn(id) {
+  const row = db.prepare('SELECT * FROM warnings WHERE id = ?').get(id);
+  if (!row) return null;
+  db.prepare('DELETE FROM warnings WHERE id = ?').run(id);
+  return row;
+}

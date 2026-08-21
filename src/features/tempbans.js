@@ -2,6 +2,7 @@ import { getExpiredTempBans, removeTempBan } from '../database/repositories/Temp
 import { getGuildConfig } from '../database/repositories/GuildConfigRepository.js';
 import { modlogEmbed } from '../utils/embeds.js';
 import { logger } from '../utils/logger.js';
+import { bus } from '../http/events.js';
 
 /**
  * Vérifie et applique tous les temp-bans expirés.
@@ -32,6 +33,11 @@ export async function processExpiredTempBans(client) {
       }
 
       removeTempBan(ban.guild_id, ban.user_id);
+      bus.publish('tempban:expired', ban.guild_id, {
+        userId: ban.user_id,
+        moderatorId: ban.moderator_id,
+        reason: ban.reason,
+      });
 
       // Log dans le salon modlogs si configuré
       const config = getGuildConfig(ban.guild_id);

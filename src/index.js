@@ -29,14 +29,32 @@ client.interactionHandlers = new Map();
 await loadCommands(client);
 await loadEvents(client);
 
+// Dashboard web (optionnel, activé via DASHBOARD_ENABLED=true)
+let dashboard = null;
+if (process.env.DASHBOARD_ENABLED === 'true') {
+  try {
+    const { startDashboard } = await import('./http/server.js');
+    client.once('ready', async () => {
+      try {
+        dashboard = await startDashboard(client);
+      } catch (err) {
+        logger.error('[dashboard] Démarrage échoué :', err.message);
+      }
+    });
+  } catch (err) {
+    logger.error('[dashboard] Import échoué :', err.message);
+  }
+}
+
 client.login(process.env.DISCORD_TOKEN).catch(err => {
   logger.error('Connexion Discord impossible :', err.message);
   process.exit(1);
 });
 
 // Arrêt propre
-function shutdown(signal) {
+async function shutdown(signal) {
   logger.info(`Signal ${signal} reçu — arrêt propre en cours…`);
+  try { await dashboard?.close(); } catch { /* ignore */ }
   client.destroy();
   process.exit(0);
 }

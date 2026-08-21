@@ -6,6 +6,7 @@ import {
 } from '../database/repositories/GiveawayRepository.js';
 import { COLORS } from '../utils/embeds.js';
 import { logger } from '../utils/logger.js';
+import { bus } from '../http/events.js';
 
 const GIVEAWAY_EMOJI = '🎉';
 
@@ -92,6 +93,13 @@ export async function finaliseGiveaway(client, giveawayId) {
 
   endGiveaway(giveawayId, winner);
   participants.delete(giveawayId);
+
+  bus.publish('giveaway:ended', giveaway.guild_id, {
+    id: giveawayId,
+    prize: giveaway.prize,
+    winnerId: winner,
+    participants: pool.length,
+  });
 
   // Nettoyage du handler de bouton
   if (client.interactionHandlers) {
