@@ -75,6 +75,56 @@ require_repo() {
   git rev-parse --git-dir &>/dev/null || die "Ce dossier n'est pas un dépôt git."
 }
 
+# Écrit KEY=VALUE dans .env (remplace si présente, ajoute sinon).
+_env_set() {
+  local key="$1" value="$2"
+  [[ -f .env ]] || touch .env
+  local escaped; escaped=$(printf '%s\n' "$value" | sed 's/[&\\/]/\\&/g')
+  if grep -q "^${key}=" .env; then
+    sed -i "s|^${key}=.*|${key}=${escaped}|" .env
+  else
+    printf '%s=%s\n' "$key" "$value" >> .env
+  fi
+}
+
+# Setup guidé du dashboard — pose les questions minimales et écrit .env.
+_setup_dashboard_env() {
+  echo
+  step "Configuration du dashboard"
+  info "Les valeurs sont écrites dans .env. Ctrl+C pour annuler."
+  echo
+
+  # BOT_OWNER_ID
+  local current_owner; current_owner=$(sed -n 's/^BOT_OWNER_ID=//p' .env | head -1)
+  read -r -p "  Ton ID Discord (BOT_OWNER_ID)${current_owner:+ [${current_owner}]} : " owner
+  owner="${owner:-$current_owner}"
+  [[ -n "$owner" ]] && _env_set BOT_OWNER_ID "$owner"
+
+  # URL publique
+  read -r -p "  URL publique du dashboard (ex : https://grook.tondomaine.tld ou http://localhost:3000) : " url
+  url="${url%/}"
+  [[ -n "$url" ]] && _env_set DASHBOARD_PUBLIC_URL "$url"
+
+  # Discord App
+  echo
+  info "Crée une app sur https://discord.com/developers/applications"
+  info "Ajoute ce redirect URI dans OAuth2 → Redirects :"
+  printf "    ${C}%s/auth/callback${NC}\n" "$url"
+  echo
+  read -r -p "  DISCORD_CLIENT_ID : " client_id
+  read -r -p "  DISCORD_CLIENT_SECRET : " client_secret
+  [[ -n "$client_id" ]]     && _env_set DISCORD_CLIENT_ID "$client_id"
+  [[ -n "$client_secret" ]] && _env_set DISCORD_CLIENT_SECRET "$client_secret"
+
+  # JWT secret
+  local jwt; jwt=$(openssl rand -hex 32 2>/dev/null || cat /dev/urandom | tr -dc 'a-f0-9' | head -c 64)
+  _env_set DASHBOARD_JWT_SECRET "$jwt"
+  ok "DASHBOARD_JWT_SECRET généré (64 chars hex)."
+
+  _env_set DASHBOARD_ENABLED true
+  ok "Dashboard configuré. Restart le bot pour l'activer : ./grook.sh restart"
+}
+
 # npm ci d'abord (rapide, reproductible) ; si le lock est désync, fallback sur npm install.
 # À utiliser dans le dossier courant.
 npm_install_deps() {
@@ -198,6 +248,18 @@ cmd_install() {
       || warn "Build du dashboard échoué — le bot marchera sans, tu peux relancer à la main."
   fi
 
+  # ── Dashboard : setup guidé si non configuré ──────────────────────────────
+  if [[ -f .env ]] && ! (( unattended )); then
+    local dash_on; dash_on=$(sed -n 's/^DASHBOARD_ENABLED=//p' .env | head -1)
+    if [[ "$dash_on" != "true" ]]; then
+      echo
+      read -r -p "  Configurer le dashboard web maintenant ? [y/N] " ans
+      if [[ "$ans" =~ ^[Yy] ]]; then
+        _setup_dashboard_env
+      fi
+    fi
+  fi
+
   # ── Persistance PM2 au reboot (Linux, best-effort) ─────────────────────────
   if has_pm2 && [[ "$(uname -s)" == "Linux" ]]; then
     step "Persistance PM2 au démarrage machine"
@@ -282,22 +344,55 @@ cmd_status() {
   echo ""
   printf "  ${BOLD}Grook v${ver}${NC}   ${DIM}${hash}  ${msg}${NC}\n"
 
+  # ── Process (PM2 ou PID bare) ──────────────────────────────────────────────
   if has_pm2 && pm2 describe "$APP_NAME" &>/dev/null; then
     local st; st=$(pm2_status)
     case "$st" in
-      online)  printf "  État    : ${G}● en ligne${NC} (PM2)\n" ;;
-      stopped) printf "  État    : ${Y}● arrêté${NC} (PM2)\n" ;;
-      *)       printf "  État    : ${R}● %s${NC} (PM2)\n" "$st" ;;
+      online)  printf "  Process : ${G}● en ligne${NC} (PM2)\n" ;;
+      stopped) printf "  Process : ${Y}● arrêté${NC} (PM2)\n" ;;
+      *)       printf "  Process : ${R}● %s${NC} (PM2)\n" "$st" ;;
     esac
     pm2 describe "$APP_NAME" 2>/dev/null | grep -E "uptime|memory|cpu|restart" | sed 's/│//g; s/^\s*/  /' | head -6
   else
     local pid; pid=$(read_pid)
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-      printf "  État    : ${G}● en ligne${NC} (PID $pid, bare-node)\n"
+      printf "  Process : ${G}● en ligne${NC} (PID $pid, bare-node)\n"
     else
-      printf "  État    : ${R}● arrêté${NC}\n"
+      printf "  Process : ${R}● arrêté${NC}\n"
     fi
   fi
+
+  # ── Healthcheck via /api/health (si dashboard activé) ─────────────────────
+  local dash_port; dash_port=$(sed -n "s/^DASHBOARD_PORT=//p" .env 2>/dev/null | head -1)
+  local dash_on;   dash_on=$(sed -n   "s/^DASHBOARD_ENABLED=//p" .env 2>/dev/null | head -1)
+  dash_port="${dash_port:-3000}"
+
+  if [[ "$dash_on" == "true" ]] && command -v curl &>/dev/null; then
+    local health; health=$(curl -sf --max-time 3 "http://localhost:${dash_port}/api/health" 2>/dev/null || echo "")
+    if [[ -n "$health" ]]; then
+      local discord db uptime
+      discord=$(echo "$health" | sed -n 's/.*"discord":\([a-z]*\).*/\1/p')
+      db=$(echo "$health"      | sed -n 's/.*"database":\([a-z]*\).*/\1/p')
+      uptime=$(echo "$health"  | sed -n 's/.*"uptime":\([0-9]*\).*/\1/p')
+      local dcolor dbcolor
+      [[ "$discord" == "true" ]] && dcolor="$G" || dcolor="$R"
+      [[ "$db" == "true" ]]      && dbcolor="$G" || dbcolor="$R"
+      printf "  Discord : ${dcolor}%s${NC}\n" "$([[ "$discord" == "true" ]] && echo "● ready" || echo "● not ready")"
+      printf "  DB      : ${dbcolor}%s${NC}\n" "$([[ "$db" == "true" ]] && echo "● accessible" || echo "● KO")"
+      printf "  Uptime  : ${uptime}s\n"
+    else
+      printf "  Health  : ${Y}dashboard non joignable sur :${dash_port}${NC}\n"
+    fi
+  fi
+
+  # ── Fichiers et taille DB ─────────────────────────────────────────────────
+  if [[ -f "$DB_FILE" ]]; then
+    printf "  DB size : $(du -h "$DB_FILE" 2>/dev/null | awk '{print $1}')\n"
+  fi
+  if [[ -d "$BACKUP_DIR" ]]; then
+    printf "  Backups : $(ls -1 "$BACKUP_DIR"/*.db 2>/dev/null | wc -l) fichier(s), $(du -sh "$BACKUP_DIR" 2>/dev/null | awk '{print $1}')\n"
+  fi
+
   printf "  Node    : $(node -v 2>/dev/null || echo '?')\n"
   echo ""
 }

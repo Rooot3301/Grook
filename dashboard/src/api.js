@@ -51,4 +51,6 @@ export const api = {
   automod:       (id)                      => request(`/api/guilds/${id}/automod`),
   updateAutomod: (id, body)                => request(`/api/guilds/${id}/automod`, { method: 'PATCH', body }),
   resetAutomod:  (id)                      => request(`/api/guilds/${id}/automod/reset`, { method: 'POST' }),
+  systemInfo:    ()                        => request('/api/system/info'),
+  systemLogs:    (limit = 100, level = 'debug') => request(`/api/system/logs?limit=${limit}&level=${level}`),
 };

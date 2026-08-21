@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { registerAuth } from './auth.js';
 import { registerWebSocket } from './ws.js';
 import { guildRoutes } from './routes/guilds.js';
+import { systemRoutes } from './routes/system.js';
 import { logger } from '../utils/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,6 +29,7 @@ export async function startDashboard(client) {
 
   await registerAuth(fastify, { publicUrl, ownerId });
   await registerWebSocket(fastify);
+  await fastify.register(systemRoutes, { client });
   await fastify.register(guildRoutes, { client });
 
   // Statique du frontend (build Vite dans dashboard/dist/)
