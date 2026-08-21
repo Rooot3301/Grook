@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-bg text-text font-sans antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+  ::selection { @apply bg-accent/25 text-text; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #252a3a; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #313850; }
+}
+
+@layer components {
+  /* Case ID stamp — signature du dashboard */
+  .stamp {
+    @apply inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider
+           text-accent px-2 py-0.5 shadow-stamp;
+    /* Corners légèrement notchés */
+    clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  }
+  .stamp::before {
+    content: '';
+    @apply block w-1 h-1 bg-accent rounded-full;
+  }
+
+  /* Panels et cartes */
+  .panel {
+    @apply bg-panel border border-border rounded-lg;
+  }
+  .panel-2 {
+    @apply bg-panel-2 border border-border rounded-md;
+  }
+
+  /* Numérotation de sidebar */
+  .nav-num {
+    @apply font-mono text-[10px] text-text-dim tabular-nums tracking-widest;
+  }
+
+  /* Boutons */
+  .btn {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium
+           border rounded-md transition-colors
+           focus:outline-none focus:ring-2 focus:ring-accent/40;
+  }
+  .btn-primary  { @apply btn bg-accent text-bg border-accent hover:bg-accent-h hover:border-accent-h; }
+  .btn-ghost    { @apply btn bg-transparent border-border text-text hover:bg-panel-2; }
+  .btn-danger   { @apply btn bg-transparent border-danger/40 text-danger hover:bg-danger/10; }
+  .btn-icon     { @apply btn px-2 bg-transparent border-transparent text-text-dim hover:text-text hover:bg-panel-2; }
+
+  /* Inputs */
+  .input {
+    @apply w-full bg-bg border border-border rounded-md px-3 py-2 text-sm
+           placeholder:text-text-dim/60
+           focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20;
+  }
+  .select { @apply input appearance-none pr-8; }
+
+  /* Tags de status */
+  .tag {
+    @apply inline-flex items-center gap-1 text-[11px] uppercase tracking-wider
+           px-1.5 py-0.5 rounded font-mono;
+  }
+  .tag-good   { @apply tag bg-good/10  text-good; }
+  .tag-warn   { @apply tag bg-accent/10 text-accent; }
+  .tag-danger { @apply tag bg-danger/10 text-danger; }
+  .tag-neutral{ @apply tag bg-border text-text-dim; }
+
+  /* Persona indicator */
+  .pulse-dot {
+    @apply relative inline-block w-2 h-2 rounded-full bg-accent;
+  }
+  .pulse-dot::after {
+    content: '';
+    @apply absolute inset-0 rounded-full bg-accent;
+    animation: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  @keyframes pulse-ring {
+    0%   { transform: scale(1);   opacity: 0.7; }
+    100% { transform: scale(3.5); opacity: 0;   }
+  }
+
+  /* Table */
+  .table {
+    @apply w-full text-sm;
+  }
+  .table th {
+    @apply text-left text-[11px] uppercase tracking-wider text-text-dim
+           font-medium py-2 px-3 border-b border-border;
+  }
+  .table td {
+    @apply py-2.5 px-3 border-b border-border/60 align-middle;
+  }
+  .table tbody tr:hover { @apply bg-panel-2/50; }
+
+  /* Titres */
+  .h-display { @apply font-display font-medium tracking-tight; }
+  .h-eyebrow { @apply text-[11px] uppercase tracking-[0.18em] text-text-dim font-mono; }
+}
