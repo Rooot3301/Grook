@@ -8,6 +8,7 @@ import { Moderation } from './pages/Moderation.jsx';
 import { Games } from './pages/Games.jsx';
 import { Fun } from './pages/Fun.jsx';
 import { Config } from './pages/Config.jsx';
+import { Automod } from './pages/Automod.jsx';
 import { Journal } from './pages/Journal.jsx';
 
 const SessionContext = createContext(null);
@@ -55,6 +56,7 @@ export function App() {
           <Route path="games"       element={<Games />} />
           <Route path="fun"         element={<Fun />} />
           <Route path="config"      element={<Config />} />
+          <Route path="automod"     element={<Automod />} />
           <Route path="journal"     element={<Journal />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

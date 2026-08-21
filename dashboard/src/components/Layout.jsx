@@ -9,7 +9,8 @@ const NAV = [
   { n: '03', to: 'games',      label: 'Jeux' },
   { n: '04', to: 'fun',        label: 'Fun' },
   { n: '05', to: 'config',     label: 'Configuration' },
-  { n: '06', to: 'journal',    label: 'Journal live' },
+  { n: '06', to: 'automod',    label: 'Automod' },
+  { n: '07', to: 'journal',    label: 'Journal live' },
 ];
 
 export function Layout() {

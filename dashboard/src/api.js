@@ -48,4 +48,7 @@ export const api = {
   giveaways:     (id)                      => request(`/api/guilds/${id}/giveaways`),
   endGiveaway:   (id, giveawayId)          => request(`/api/guilds/${id}/giveaways/${giveawayId}/end`, { method: 'POST' }),
   stats:         (id)                      => request(`/api/guilds/${id}/stats`),
+  automod:       (id)                      => request(`/api/guilds/${id}/automod`),
+  updateAutomod: (id, body)                => request(`/api/guilds/${id}/automod`, { method: 'PATCH', body }),
+  resetAutomod:  (id)                      => request(`/api/guilds/${id}/automod/reset`, { method: 'POST' }),
 };

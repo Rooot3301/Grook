@@ -1,13 +1,8 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { createWarn, getWarnsForUser } from '../../database/repositories/WarnRepository.js';
+import { getAutomodConfig } from '../../database/repositories/AutomodRepository.js';
 import { runSanctionGuards, notifyTarget, finalizeSanction } from '../../utils/sanctions.js';
-
-// Seuils : à chaque palier atteint, escalade automatique
-const THRESHOLDS = [
-  { count: 7, action: 'BAN',  label: 'Banni automatiquement (7 avertissements)' },
-  { count: 5, action: 'KICK', label: 'Expulsé automatiquement (5 avertissements)' },
-  { count: 3, action: 'MUTE', label: 'Mute 1h automatiquement (3 avertissements)', muteMs: 60 * 60 * 1000 },
-];
+import { formatDuration } from '../../utils/time.js';
 
 export const data = new SlashCommandBuilder()
   .setName('warn')
@@ -34,35 +29,37 @@ export async function execute(interaction) {
   });
   await interaction.reply({ embeds: [embed] });
 
-  // ── Escalade automatique ─────────────────────────────────────────────────
-  const threshold = THRESHOLDS.find(t => warnCount === t.count);
-  if (!threshold) return;
+  // ── Escalade automatique — DÉSACTIVÉE par défaut, se configure via /config ──
+  const cfg = getAutomodConfig(interaction.guild.id);
+  if (!cfg.enabled) return;
 
-  const botReason = `${threshold.label} · via /warn`;
-  const bot       = interaction.client.user;
+  const bot     = interaction.client.user;
+  const fakeCtx = { client: interaction.client, guild: interaction.guild, user: bot };
+  const escalate = (action, extra, expiresAt) => finalizeSanction(fakeCtx, {
+    action, target, reason: `[Automod] Seuil ${action} atteint (${warnCount} warns)`, extra, expiresAt,
+  });
 
-  // Escalade → fake une "interaction" minimaliste pour finalizeSanction (client = bot)
-  const escalate = async (action, extra, expiresAt) => finalizeSanction(
-    { client: interaction.client, guild: interaction.guild, user: bot },
-    { action, target, reason: botReason, extra, expiresAt },
-  );
-
-  if (threshold.action === 'BAN' && guard.member.bannable) {
-    notifyTarget(target, interaction.guild.name, `🔨 Tu as été **banni** (seuil automatique : 7 avertissements).`);
-    await guard.member.ban({ reason: botReason });
+  if (cfg.warn_ban_at && warnCount >= cfg.warn_ban_at && guard.member.bannable) {
+    notifyTarget(target, interaction.guild.name, `🔨 Automod : ban au seuil de ${cfg.warn_ban_at} warns.`);
+    await guard.member.ban({ reason: `[Automod ban] ${warnCount} warns` });
     await escalate('BAN');
     return;
   }
-  if (threshold.action === 'KICK' && guard.member.kickable) {
-    notifyTarget(target, interaction.guild.name, `👢 Tu as été **expulsé** (seuil automatique : 5 avertissements).`);
-    await guard.member.kick(botReason);
+  if (cfg.warn_kick_at && warnCount >= cfg.warn_kick_at && guard.member.kickable) {
+    notifyTarget(target, interaction.guild.name, `👢 Automod : expulsion au seuil de ${cfg.warn_kick_at} warns.`);
+    await guard.member.kick(`[Automod kick] ${warnCount} warns`);
     await escalate('KICK');
     return;
   }
-  if (threshold.action === 'MUTE' && guard.member.moderatable) {
-    notifyTarget(target, interaction.guild.name, `🔇 Tu as été **mute 1h** (seuil automatique : 3 avertissements).`);
-    await guard.member.timeout(threshold.muteMs, botReason);
-    const expiresAt = new Date(Date.now() + threshold.muteMs);
-    await escalate('MUTE', { '⏱️ Durée': '1h', '⏰ Expire': `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>` }, expiresAt);
+  if (cfg.warn_mute_at && warnCount >= cfg.warn_mute_at && guard.member.moderatable) {
+    const durS = Math.max(60, Math.min(28 * 24 * 3600, cfg.warn_mute_duration || 3600));
+    const ms   = durS * 1000;
+    const expiresAt = new Date(Date.now() + ms);
+    notifyTarget(target, interaction.guild.name, `🔇 Automod : mute ${formatDuration(ms)} au seuil de ${cfg.warn_mute_at} warns.`);
+    await guard.member.timeout(ms, `[Automod mute] ${warnCount} warns`);
+    await escalate('MUTE', {
+      '⏱️ Durée': formatDuration(ms),
+      '⏰ Expire': `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>`,
+    }, expiresAt);
   }
 }

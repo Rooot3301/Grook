@@ -51,6 +51,18 @@ db.exec(`
     next_case INTEGER NOT NULL DEFAULT 1
   );
 
+  -- Automod : escalade auto sur seuils de warn, DÉSACTIVÉE par défaut.
+  -- Chaque seuil est facultatif : NULL = pas d'escalade à ce niveau.
+  CREATE TABLE IF NOT EXISTS automod_config (
+    guild_id           TEXT PRIMARY KEY,
+    enabled            INTEGER NOT NULL DEFAULT 0,
+    warn_mute_at       INTEGER,           -- ex : 3 = mute au 3e warn
+    warn_mute_duration INTEGER,           -- durée du mute en secondes
+    warn_kick_at       INTEGER,           -- ex : 5 = kick au 5e warn
+    warn_ban_at        INTEGER,           -- ex : 7 = ban au 7e warn
+    updated_at         INTEGER DEFAULT (unixepoch())
+  );
+
   CREATE TABLE IF NOT EXISTS warnings (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     guild_id     TEXT NOT NULL,

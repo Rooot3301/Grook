@@ -4,6 +4,7 @@ import { getWarnsForGuild, removeWarn } from '../../database/repositories/WarnRe
 import { getTempBansForGuild, removeTempBan } from '../../database/repositories/TempBanRepository.js';
 import { getGiveawaysForGuild, endGiveaway } from '../../database/repositories/GiveawayRepository.js';
 import { getStatsForGuild } from '../../database/repositories/StatsRepository.js';
+import { getAutomodConfig, setAutomodConfig, resetAutomodConfig } from '../../database/repositories/AutomodRepository.js';
 import { bus } from '../events.js';
 
 /**
@@ -137,5 +138,36 @@ export async function guildRoutes(fastify, { client }) {
   // Stats des jeux
   fastify.get('/api/guilds/:id/stats', guard, async (request) => {
     return getStatsForGuild(request.params.id);
+  });
+
+  // ── Automod (escalade sur seuils de warn) ────────────────────────────────
+  fastify.get('/api/guilds/:id/automod', guard, async (request) => {
+    return getAutomodConfig(request.params.id);
+  });
+
+  fastify.patch('/api/guilds/:id/automod', guard, async (request, reply) => {
+    const allowed = ['enabled', 'warn_mute_at', 'warn_mute_duration', 'warn_kick_at', 'warn_ban_at'];
+    const updates = {};
+    for (const k of allowed) {
+      if (!(k in request.body)) continue;
+      const v = request.body[k];
+      if (v === null || v === undefined || v === '') { updates[k] = null; continue; }
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 0 || n > 100_000) {
+        return reply.code(400).send({ error: `invalid_${k}` });
+      }
+      updates[k] = n;
+    }
+    if (!Object.keys(updates).length) return reply.code(400).send({ error: 'no_valid_fields' });
+
+    const next = setAutomodConfig(request.params.id, updates);
+    bus.publish('automod:updated', request.params.id, next);
+    return next;
+  });
+
+  fastify.post('/api/guilds/:id/automod/reset', guard, async (request) => {
+    const next = resetAutomodConfig(request.params.id);
+    bus.publish('automod:reset', request.params.id, {});
+    return next;
   });
 }
