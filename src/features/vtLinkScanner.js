@@ -98,18 +98,21 @@ function extractUrl(text) {
  * @param {import('discord.js').Message} message
  */
 export async function handleLinkScan(message) {
+  // Fast-path : gates les plus larges d'abord pour éviter d'aller en DB
+  // sur tous les messages sans lien.
   if (!process.env.VIRUSTOTAL_API_KEY?.trim()) return;
   if (message.author.bot || !message.guild) return;
-
-  const config = getGuildConfig(message.guild.id);
-  if (!config.vt_scanner) return;
 
   const url = extractUrl(message.content);
   if (!url) return;
 
-  // Cooldown par salon
   const now = Date.now();
   if (now - (channelCooldowns.get(message.channel.id) ?? 0) < CHANNEL_COOLDOWN_MS) return;
+
+  // Enfin la DB (guild_config) et l'activation par serveur.
+  const config = getGuildConfig(message.guild.id);
+  if (!config.vt_scanner) return;
+
   channelCooldowns.set(message.channel.id, now);
 
   const report = await analyzeUrl(url);

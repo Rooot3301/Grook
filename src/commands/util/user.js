@@ -1,80 +1,185 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import {
+  SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle,
+} from 'discord.js';
 import { getWarnsForUser } from '../../database/repositories/WarnRepository.js';
 import { getCasesForUser } from '../../database/repositories/CaseRepository.js';
+import { getTempBan }      from '../../database/repositories/TempBanRepository.js';
+import { getAfk }          from '../../database/repositories/AfkRepository.js';
 import { sendPaginated } from '../../utils/pagination.js';
 import { COLORS, successEmbed, errorEmbed } from '../../utils/embeds.js';
 
-const MAX_ROLES_SHOWN = 15;
+const MAX_ROLES_SHOWN = 12;
 
 export const data = new SlashCommandBuilder()
   .setName('user')
-  .setDescription('Fiche d\'un utilisateur — infos, avatar, avertissements, casier.')
+  .setDescription('Fiche d\'un utilisateur — profil aggrégé, avatar, avertissements, casier.')
   .addSubcommand(s => s
     .setName('info')
-    .setDescription('Informations générales d\'un utilisateur (accepte un ID hors serveur).')
-    .addStringOption(o => o.setName('cible').setDescription('Utilisateur (mention ou ID)').setRequired(true)))
+    .setDescription('Profil aggrégé : rôles, warns, cases, tempban, AFK.')
+    .addUserOption(o => o.setName('user').setDescription('Membre (toi si vide)').setRequired(false)))
   .addSubcommand(s => s
     .setName('avatar')
-    .setDescription('Avatar HD d\'un utilisateur.')
-    .addUserOption(o => o.setName('user').setDescription('Utilisateur (toi si vide)').setRequired(false)))
+    .setDescription('Avatar HD.')
+    .addUserOption(o => o.setName('user').setDescription('Membre (toi si vide)').setRequired(false)))
   .addSubcommand(s => s
     .setName('warnings')
-    .setDescription('Liste des avertissements d\'un membre.')
+    .setDescription('Liste des avertissements.')
     .addUserOption(o => o.setName('user').setDescription('Membre').setRequired(true)))
   .addSubcommand(s => s
     .setName('cases')
-    .setDescription('Casier disciplinaire d\'un membre.')
+    .setDescription('Casier disciplinaire.')
     .addUserOption(o => o.setName('user').setDescription('Membre').setRequired(true)));
 
-export async function execute(interaction) {
+export async function execute(interaction, client) {
   const sub = interaction.options.getSubcommand();
-  if (sub === 'info')     return userInfo(interaction);
+  if (sub === 'info')     return userInfo(interaction, client);
   if (sub === 'avatar')   return userAvatar(interaction);
   if (sub === 'warnings') return userWarnings(interaction);
   if (sub === 'cases')    return userCases(interaction);
 }
 
-async function userInfo(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-  const raw = interaction.options.getString('cible').replace(/[<@!>]/g, '').trim();
-  if (!/^\d{17,20}$/.test(raw)) {
-    return interaction.editReply({ embeds: [errorEmbed('ID Discord invalide. Fournis une mention ou un ID numérique.')] });
-  }
+// ─── Fiche riche aggrégée + boutons ──────────────────────────────────────────
+async function userInfo(interaction, client) {
+  const target = interaction.options.getUser('user') ?? interaction.user;
+  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+  const gid    = interaction.guild.id;
 
-  let user;
-  try { user = await interaction.client.users.fetch(raw, { force: true }); }
-  catch { return interaction.editReply({ embeds: [errorEmbed(`Aucun utilisateur trouvé avec l'ID \`${raw}\`.`)] }); }
-
-  const member = await interaction.guild.members.fetch(raw).catch(() => null);
+  const warns    = getWarnsForUser(gid, target.id);
+  const cases    = getCasesForUser(gid, target.id);
+  const tempban  = getTempBan(gid, target.id);
+  const afk      = getAfk(target.id, gid);
 
   const embed = new EmbedBuilder()
     .setColor(member?.displayHexColor ?? COLORS.INFO)
-    .setTitle(user.tag)
-    .setThumbnail(user.displayAvatarURL({ size: 256, dynamic: true }))
+    .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL({ dynamic: true }) })
+    .setThumbnail(target.displayAvatarURL({ size: 256, dynamic: true }))
     .addFields(
-      { name: '🆔 ID',             value: user.id, inline: true },
-      { name: '🤖 Bot',            value: user.bot ? 'Oui' : 'Non', inline: true },
-      { name: '📅 Compte créé',    value: `<t:${Math.floor(user.createdTimestamp / 1000)}:R>`, inline: true },
+      { name: '🆔 ID',           value: `\`${target.id}\``, inline: true },
+      { name: '📅 Compte créé',  value: `<t:${Math.floor(target.createdTimestamp / 1000)}:R>`, inline: true },
+      { name: '🤖 Bot',          value: target.bot ? 'Oui' : 'Non', inline: true },
     );
 
   if (member) {
-    const allRoles = member.roles.cache.filter(r => r.id !== interaction.guild.id);
+    const allRoles = member.roles.cache.filter(r => r.id !== gid);
     const shown    = allRoles.first(MAX_ROLES_SHOWN).map(r => r.toString());
     const overflow = Math.max(0, allRoles.size - shown.length);
     embed.addFields(
       { name: '📥 Rejoint', value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true },
+      { name: '🎨 Couleur', value: member.displayHexColor === '#000000' ? '*(aucune)*' : member.displayHexColor, inline: true },
+      { name: '💬 Pseudo',  value: member.nickname || '*(aucun)*', inline: true },
       { name: `🎭 Rôles (${allRoles.size})`,
-        value: shown.length ? shown.join(' ') + (overflow ? ` *+${overflow}*` : '') : 'Aucun',
+        value: shown.length ? shown.join(' ') + (overflow ? ` *+${overflow}*` : '') : '*(aucun)*',
         inline: false },
     );
-    if (member.nickname) embed.addFields({ name: '✏️ Pseudo serveur', value: member.nickname, inline: true });
   } else {
     embed.setFooter({ text: 'Cet utilisateur n\'est pas dans ce serveur.' });
   }
 
-  await interaction.editReply({ embeds: [embed] });
+  // ── Bloc de synthèse modération ─────────────────────────────────────────
+  const modLines = [];
+  modLines.push(`⚠️ **Warns actifs** : \`${warns.length}\``);
+  if (cases.length) {
+    const latest = cases[0];
+    modLines.push(`📋 **Casier** : \`${cases.length}\` cas — dernier \`${latest.type}\` <t:${latest.created_at}:R>`);
+  } else {
+    modLines.push('📋 **Casier** : vide');
+  }
+  if (tempban) {
+    modLines.push(`⏳ **Temp-ban actif** — expire <t:${tempban.expires_at}:R>`);
+  }
+  if (member?.communicationDisabledUntil) {
+    modLines.push(`🔇 **Mute actif** — expire <t:${Math.floor(member.communicationDisabledUntil.getTime() / 1000)}:R>`);
+  }
+  if (afk) {
+    modLines.push(`💤 **AFK** — ${afk.reason} (depuis <t:${afk.set_at}:R>)`);
+  }
+
+  embed.addFields({ name: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', value: modLines.join('\n'), inline: false });
+
+  // ── Boutons d'action rapide (uniquement si le user a les perms) ─────────
+  const canModerate = interaction.memberPermissions.has(PermissionFlagsBits.KickMembers)
+                   || interaction.memberPermissions.has(PermissionFlagsBits.ModerateMembers);
+  const components = [];
+
+  if (canModerate) {
+    const row1 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`ufi:w:${target.id}`).setLabel('Warnings').setEmoji('⚠️').setStyle(ButtonStyle.Secondary).setDisabled(!warns.length),
+      new ButtonBuilder().setCustomId(`ufi:c:${target.id}`).setLabel('Casier').setEmoji('📋').setStyle(ButtonStyle.Secondary).setDisabled(!cases.length),
+      new ButtonBuilder().setCustomId(`ufi:a:${target.id}`).setLabel('Avatar HD').setEmoji('🖼️').setStyle(ButtonStyle.Secondary),
+    );
+    components.push(row1);
+  }
+
+  const reply = await interaction.reply({ embeds: [embed], components, ephemeral: true, fetchReply: true });
+  if (!components.length) return;
+
+  // ── Collector pour les boutons ──────────────────────────────────────────
+  const collector = reply.createMessageComponentCollector({
+    filter: i => i.user.id === interaction.user.id && i.customId.startsWith(`ufi:`),
+    time: 5 * 60_000,
+  });
+
+  collector.on('collect', async (btn) => {
+    const [, action, userId] = btn.customId.split(':');
+    const u = await client.users.fetch(userId).catch(() => null);
+    if (!u) return btn.reply({ content: '❌ Utilisateur introuvable.', ephemeral: true });
+
+    if (action === 'w') {
+      const list = getWarnsForUser(gid, u.id);
+      return showWarnings(btn, u, list);
+    }
+    if (action === 'c') {
+      const list = getCasesForUser(gid, u.id);
+      return showCases(btn, u, list);
+    }
+    if (action === 'a') {
+      const av = u.displayAvatarURL({ size: 4096, extension: 'png' });
+      return btn.reply({
+        embeds: [new EmbedBuilder().setTitle(`🖼️ Avatar de ${u.tag}`).setImage(av).setColor(COLORS.INFO).setURL(av)],
+        ephemeral: true,
+      });
+    }
+  });
+
+  collector.on('end', () => interaction.editReply({ components: [] }).catch(() => {}));
 }
 
+// ─── Rendu paginé de la liste warns/cases via bouton (réutilise pagination) ─
+async function showWarnings(btn, user, warns) {
+  if (!warns.length) return btn.reply({ embeds: [successEmbed(`**${user.tag}** n'a aucun warn.`)], ephemeral: true });
+  await sendPaginated(btn, warns, (slice, page) => {
+    const e = new EmbedBuilder().setTitle(`⚠️ Warns de ${user.tag}`).setColor(COLORS.WARN)
+      .setDescription(`**${warns.length}** avertissement(s).`)
+      .setThumbnail(user.displayAvatarURL({ dynamic: true }));
+    for (const [i, w] of slice.entries()) {
+      e.addFields({
+        name:  `#${(page - 1) * 5 + i + 1} — <t:${w.created_at}:D>`,
+        value: `${w.reason}\n— <@${w.moderator_id}>`,
+      });
+    }
+    return e;
+  }, { perPage: 5, ephemeral: true });
+}
+
+async function showCases(btn, user, cases) {
+  if (!cases.length) return btn.reply({ embeds: [successEmbed(`**${user.tag}** n'a aucun cas.`)], ephemeral: true });
+  await sendPaginated(btn, cases, (slice) => {
+    const e = new EmbedBuilder().setTitle(`📋 Casier de ${user.tag}`).setColor(COLORS.INFO)
+      .setThumbnail(user.displayAvatarURL({ dynamic: true }))
+      .setDescription(`**${cases.length}** cas enregistré(s).`);
+    for (const c of slice) {
+      const exp = c.expires_at ? ` · Exp <t:${c.expires_at}:R>` : '';
+      e.addFields({
+        name:  `\`${c.case_id}\` — ${c.type}${exp}`,
+        value: `${c.reason}\n— <@${c.moderator_id}> · <t:${c.created_at}:F>`,
+      });
+    }
+    return e;
+  }, { perPage: 5, ephemeral: true });
+}
+
+// ─── Avatar direct (subcommand simple) ──────────────────────────────────────
 async function userAvatar(interaction) {
   const target = interaction.options.getUser('user') ?? interaction.user;
   const global = target.displayAvatarURL({ size: 4096, extension: 'png' });
@@ -86,57 +191,53 @@ async function userAvatar(interaction) {
     .setColor(COLORS.INFO)
     .setImage(server ?? global)
     .setURL(server ?? global);
-
   await interaction.reply({ embeds: [embed] });
 }
 
+// ─── Warnings et cases (subcommands directes) ───────────────────────────────
 async function userWarnings(interaction) {
   const target = interaction.options.getUser('user', true);
   if (!interaction.memberPermissions.has(PermissionFlagsBits.KickMembers)) {
-    return interaction.reply({ embeds: [errorEmbed('La consultation des avertissements requiert Kick Members.')], ephemeral: true });
+    return interaction.reply({ embeds: [errorEmbed('La consultation des avertissements nécessite Kick Members.')], ephemeral: true });
   }
   const warns = getWarnsForUser(interaction.guild.id, target.id);
   if (!warns.length) {
     return interaction.reply({ embeds: [successEmbed(`**${target.tag}** n'a aucun avertissement.`)], ephemeral: true });
   }
   await sendPaginated(interaction, warns, (slice, page) => {
-    const embed = new EmbedBuilder()
-      .setTitle(`⚠️ Avertissements de ${target.tag}`)
-      .setColor(COLORS.WARN)
+    const e = new EmbedBuilder().setTitle(`⚠️ Warns de ${target.tag}`).setColor(COLORS.WARN)
       .setDescription(`**${warns.length}** avertissement(s).`)
       .setThumbnail(target.displayAvatarURL({ dynamic: true }));
     for (const [i, w] of slice.entries()) {
-      embed.addFields({
+      e.addFields({
         name:  `#${(page - 1) * 5 + i + 1} — <t:${w.created_at}:D>`,
         value: `${w.reason}\n— <@${w.moderator_id}>`,
       });
     }
-    return embed;
+    return e;
   }, { perPage: 5, ephemeral: true });
 }
 
 async function userCases(interaction) {
   const target = interaction.options.getUser('user', true);
   if (!interaction.memberPermissions.has(PermissionFlagsBits.ViewAuditLog)) {
-    return interaction.reply({ embeds: [errorEmbed('La consultation du casier requiert View Audit Log.')], ephemeral: true });
+    return interaction.reply({ embeds: [errorEmbed('La consultation du casier nécessite View Audit Log.')], ephemeral: true });
   }
   const cases = getCasesForUser(interaction.guild.id, target.id);
   if (!cases.length) {
     return interaction.reply({ embeds: [successEmbed(`**${target.tag}** n'a aucun cas enregistré.`)], ephemeral: true });
   }
   await sendPaginated(interaction, cases, (slice) => {
-    const embed = new EmbedBuilder()
-      .setTitle(`📋 Casier de ${target.tag}`)
+    const e = new EmbedBuilder().setTitle(`📋 Casier de ${target.tag}`).setColor(COLORS.INFO)
       .setThumbnail(target.displayAvatarURL({ dynamic: true }))
-      .setColor(COLORS.INFO)
       .setDescription(`**${cases.length}** cas enregistré(s).`);
     for (const c of slice) {
-      const exp = c.expires_at ? ` · Exp: <t:${c.expires_at}:R>` : '';
-      embed.addFields({
+      const exp = c.expires_at ? ` · Exp <t:${c.expires_at}:R>` : '';
+      e.addFields({
         name:  `\`${c.case_id}\` — ${c.type}${exp}`,
         value: `${c.reason}\n— <@${c.moderator_id}> · <t:${c.created_at}:F>`,
       });
     }
-    return embed;
+    return e;
   }, { perPage: 5, ephemeral: true });
 }

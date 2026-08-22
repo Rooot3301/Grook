@@ -1,11 +1,24 @@
 // Source unique de vérité pour la version du bot.
 // Incrémentez VERSION à chaque release.
 
-export const VERSION    = '2.5.0';
+export const VERSION    = '2.6.0';
 export const BUILD_DATE = '2026-08-21';
 
 // Changelog compact — dernières entrées en tête
 export const CHANGELOG = [
+  { version: '2.6.0', date: '2026-08-21', changes: [
+    '/help : autocomplete sur nom de commande + détail au choix',
+    '/help : pagination par catégorie avec boutons de navigation',
+    '/user info : profil aggrégé (warns, cases, tempban, mute actif, AFK)',
+    '/user info : boutons Warnings / Casier / Avatar HD',
+    'Wipe des résidus de commandes fantômes (scope opposé)',
+    './grook.sh sync : force-sync via JWT + /api/system/sync-commands',
+    '/game guess : suppression du "10% de mentir" (statistiquement injouable)',
+    '/game typer : comparaison indulgente (casse + accents ignorés)',
+    'Fix DB : ordering déterministe (id DESC en secondary sort)',
+    'Perf : vtLinkScanner reorderé (extractUrl avant getGuildConfig)',
+    'Cleanup : imports morts strippés dans commands/*/impl/',
+  ] },
   { version: '2.5.0', date: '2026-08-21', changes: [
     'Correctness : case IDs séquentiels atomiques (fin des collisions COUNT)',
     'Correctness : bug 25j setTimeout corrigé via safeSetTimeout',
