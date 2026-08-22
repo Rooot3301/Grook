@@ -537,6 +537,46 @@ cmd_dev() {
   node --watch src/index.js
 }
 
+# Force-re-publie les slash commands sur Discord et wipe les résidus.
+# Passe par l'API /api/system/sync-commands du dashboard (auth owner via cookie
+# ephemeral n'est pas possible en CLI → on utilise un token JWT signé à la volée).
+# Fallback si le dashboard n'est pas activé : suggère un restart.
+cmd_sync() {
+  local dash_on;   dash_on=$(sed -n 's/^DASHBOARD_ENABLED=//p' .env 2>/dev/null | head -1)
+  local dash_port; dash_port=$(sed -n 's/^DASHBOARD_PORT=//p' .env 2>/dev/null | head -1)
+  dash_port="${dash_port:-3000}"
+
+  if [[ "$dash_on" != "true" ]]; then
+    warn "Le dashboard n'est pas activé (DASHBOARD_ENABLED != true)."
+    info "Sans dashboard, un './grook.sh restart' force le re-sync au boot."
+    return 1
+  fi
+
+  # Génère un JWT owner-scoped signé avec DASHBOARD_JWT_SECRET
+  local secret owner
+  secret=$(sed -n 's/^DASHBOARD_JWT_SECRET=//p' .env | head -1)
+  owner=$(sed -n  's/^BOT_OWNER_ID=//p' .env | head -1)
+  [[ -z "$secret" || -z "$owner" ]] && die "DASHBOARD_JWT_SECRET ou BOT_OWNER_ID manquant dans .env."
+
+  local jwt
+  jwt=$(node -e "
+    const c = require('crypto');
+    const header  = Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({userId:'${owner}',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+300})).toString('base64url');
+    const sig     = c.createHmac('sha256','${secret}').update(\`\${header}.\${payload}\`).digest('base64url');
+    process.stdout.write(\`\${header}.\${payload}.\${sig}\`);
+  ")
+
+  step "Sync commands"
+  local resp; resp=$(curl -sf -X POST "http://localhost:${dash_port}/api/system/sync-commands" \
+    -H "Cookie: grook_session=${jwt}" 2>&1)
+  if [[ -z "$resp" ]]; then
+    err "L'API n'a pas répondu. Le bot tourne bien avec le dashboard activé ?"
+    return 1
+  fi
+  ok "Réponse : ${resp}"
+}
+
 cmd_help() {
   cat <<EOF
 
@@ -559,6 +599,8 @@ cmd_help() {
     update           Update depuis GitHub :
                        git fetch → backup DB → git pull --ff-only
                        → npm ci → restart → healthcheck → rollback si fail
+    sync             Force la re-publication des slash commands + wipe
+                       les résidus (nécessite le dashboard activé)
 
   ${BOLD}Divers${NC}
     help             Cette aide
@@ -585,6 +627,7 @@ case "$COMMAND" in
   backup)           cmd_backup ;;
   update)           cmd_update ;;
   dev)              cmd_dev ;;
+  sync)             cmd_sync ;;
   help|--help|-h)   cmd_help ;;
   *)
     err "Commande inconnue : '${COMMAND}'"

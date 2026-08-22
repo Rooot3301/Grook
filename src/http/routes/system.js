@@ -1,5 +1,6 @@
 import db from '../../database/index.js';
 import { getRecentLogs } from '../../utils/logger.js';
+import { syncCommands } from '../../loaders/commands.js';
 import { VERSION, BUILD_DATE } from '../../version.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -57,5 +58,10 @@ export async function systemRoutes(fastify, { client }) {
     const minLevel = ['debug','info','warn','error'].includes(request.query.level)
       ? request.query.level : 'debug';
     return { logs: getRecentLogs(limit, minLevel) };
+  });
+
+  // ── Force-sync des slash commands (utile pour vider les résidus) ────────
+  fastify.post('/api/system/sync-commands', { preHandler: fastify.requireOwner }, async () => {
+    return await syncCommands(client);
   });
 }

@@ -1,9 +1,3 @@
-import { SlashCommandBuilder } from 'discord.js';
-
-export const data = new SlashCommandBuilder()
-  .setName('grookflip')
-  .setDescription('Pile ou face (Grook peut tricher).');
-
 export async function execute(interaction) {
   const roll = Math.random();
   let result;

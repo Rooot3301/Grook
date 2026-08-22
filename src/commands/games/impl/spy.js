@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { incrementWin } from '../../../database/repositories/StatsRepository.js';
 
 const activeSpies = new Map();
@@ -14,10 +14,6 @@ const WORD_PAIRS = [
   ['Paris', 'Londres'],
   ['Chocolat', 'Caramel'],
 ];
-
-export const data = new SlashCommandBuilder()
-  .setName('grookspy')
-  .setDescription('GrookSpy (Undercover) — trouvez l\'espion parmi vous !');
 
 export async function execute(interaction, client) {
   const channelId = interaction.channel.id;

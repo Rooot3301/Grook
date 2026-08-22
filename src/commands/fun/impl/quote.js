@@ -1,13 +1,5 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { EmbedBuilder } from 'discord.js';
 import { COLORS, errorEmbed } from '../../../utils/embeds.js';
-
-export const data = new SlashCommandBuilder()
-  .setName('grookquote')
-  .setDescription('Citer un message de ce serveur de façon stylée.')
-  .addStringOption(o => o
-    .setName('message')
-    .setDescription('Lien ou ID du message à citer')
-    .setRequired(true));
 
 export async function execute(interaction) {
   const input = interaction.options.getString('message', true).trim();

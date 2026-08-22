@@ -1,11 +1,6 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { EmbedBuilder } from 'discord.js';
 import { getStatsForGuild, getStatsForUser } from '../../../database/repositories/StatsRepository.js';
 import { COLORS } from '../../../utils/embeds.js';
-
-export const data = new SlashCommandBuilder()
-  .setName('grookstats')
-  .setDescription('Voir le classement des mini-jeux du serveur ou les stats d\'un joueur.')
-  .addUserOption(o => o.setName('user').setDescription('Voir les stats d\'un joueur spécifique').setRequired(false));
 
 export async function execute(interaction) {
   const targetUser = interaction.options.getUser('user');

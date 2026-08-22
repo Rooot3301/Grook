@@ -1,15 +1,7 @@
-import {
-  SlashCommandBuilder, EmbedBuilder,
-  ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  ModalBuilder, TextInputBuilder, TextInputStyle,
-} from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { incrementWin } from '../../../database/repositories/StatsRepository.js';
 
 const activeLiars = new Map();
-
-export const data = new SlashCommandBuilder()
-  .setName('liar')
-  .setDescription('Deux vérités, un mensonge — les autres doivent trouver le mensonge.');
 
 export async function execute(interaction, client) {
   const channelId = interaction.channel.id;

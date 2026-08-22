@@ -1,5 +1,3 @@
-import { SlashCommandBuilder } from 'discord.js';
-
 const FORTUNES = [
   '{user}, évite les liens suspects aujourd\'hui… ou pas.',
   '{user}, un grand destin t\'attend… dans un jeu vidéo.',
@@ -14,14 +12,6 @@ const FORTUNES = [
   '{user}, les astres te conseillent de faire une pause.',
   '{user}, quelqu\'un complotera contre toi… puis abandonnera.',
 ];
-
-export const data = new SlashCommandBuilder()
-  .setName('grookfortune')
-  .setDescription('Recevoir une prédiction façon cookie chinois.')
-  .addUserOption(o => o
-    .setName('user')
-    .setDescription('Membre ciblé (vous-même si vide)')
-    .setRequired(false));
 
 export async function execute(interaction) {
   const target  = interaction.options.getUser('user') || interaction.user;

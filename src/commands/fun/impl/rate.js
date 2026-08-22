@@ -1,14 +1,3 @@
-import { SlashCommandBuilder } from 'discord.js';
-
-export const data = new SlashCommandBuilder()
-  .setName('grookrate')
-  .setDescription('Évaluer quelque chose de 0 à 10, avec le flair de Grook.')
-  .addStringOption(o => o
-    .setName('truc')
-    .setDescription('Ce que tu veux que je note')
-    .setMaxLength(100)
-    .setRequired(true));
-
 export async function execute(interaction) {
   const thing = interaction.options.getString('truc', true);
   const score = Math.floor(Math.random() * 11);

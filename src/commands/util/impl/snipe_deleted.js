@@ -1,11 +1,6 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getDeleted } from '../../../features/snipe.js';
 import { COLORS, errorEmbed } from '../../../utils/embeds.js';
-
-export const data = new SlashCommandBuilder()
-  .setName('snipe')
-  .setDescription('Affiche le dernier message supprimé dans ce salon.')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
 
 export async function execute(interaction) {
   const entry = getDeleted(interaction.channelId);

@@ -1,11 +1,6 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getEdited } from '../../../features/snipe.js';
 import { COLORS, errorEmbed } from '../../../utils/embeds.js';
-
-export const data = new SlashCommandBuilder()
-  .setName('editsnipe')
-  .setDescription('Affiche la dernière modification de message dans ce salon.')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
 
 export async function execute(interaction) {
   const entry = getEdited(interaction.channelId);
