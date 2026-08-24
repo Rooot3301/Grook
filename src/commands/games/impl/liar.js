@@ -3,6 +3,11 @@ import { incrementWin } from '../../../database/repositories/StatsRepository.js'
 
 const activeLiars = new Map();
 
+// TTL de sécurité — si l'hôte ne soumet jamais le modal, le lock disparaît
+// automatiquement après ce délai (au lieu de bloquer le salon jusqu'au restart).
+const ABANDON_TIMEOUT_MS  = 5 * 60_000;
+const VOTE_DURATION_MS    = 45_000;
+
 export async function execute(interaction, client) {
   const channelId = interaction.channel.id;
   if (activeLiars.has(channelId)) {
@@ -10,8 +15,21 @@ export async function execute(interaction, client) {
   }
 
   const modalId = `liar_modal_${Date.now()}`;
-  const state   = { hostId: interaction.user.id, statements: [], lieIndex: null, votePrefix: null, votes: new Map(), messageId: null };
+  const state   = {
+    hostId: interaction.user.id, statements: [], lieIndex: null,
+    votePrefix: null, votes: new Map(), messageId: null, modalId,
+    abandonTimer: null,
+  };
   activeLiars.set(channelId, state);
+
+  // Nettoie le lock si le modal n'est jamais soumis (user ferme la fenêtre).
+  state.abandonTimer = setTimeout(() => {
+    if (activeLiars.get(channelId) === state && !state.statements.length) {
+      activeLiars.delete(channelId);
+      client.interactionHandlers.delete(modalId);
+    }
+  }, ABANDON_TIMEOUT_MS);
+  state.abandonTimer.unref?.();
 
   const modal = new ModalBuilder().setCustomId(modalId).setTitle('Deux vérités, un mensonge');
   modal.addComponents(
@@ -31,6 +49,7 @@ export async function execute(interaction, client) {
 
     state.statements = [s1, s2, s3];
     state.lieIndex   = idx - 1;
+    clearTimeout(state.abandonTimer);   // le modal a bien été soumis
     client.interactionHandlers.delete(modalId);
 
     const LABELS = ['A', 'B', 'C'];
@@ -61,7 +80,7 @@ export async function execute(interaction, client) {
       });
     }
 
-    setTimeout(() => concludeLiar(submit, client, channelId), 45_000);
+    setTimeout(() => concludeLiar(submit, client, channelId), VOTE_DURATION_MS);
   });
 
   await interaction.showModal(modal);

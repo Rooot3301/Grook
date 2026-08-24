@@ -59,14 +59,21 @@ export function scheduleGiveaway(client, giveaway) {
   if (schedules.has(giveaway.id)) return schedules.get(giveaway.id);
 
   const delay = giveaway.ends_at * 1000 - Date.now();
+  // Wrapper qui swallow les erreurs pour ne PAS remonter en unhandledRejection.
+  // finaliseGiveaway a son propre try/catch mais on double-guard par sécurité.
+  const run = () =>
+    Promise.resolve()
+      .then(() => finaliseGiveaway(client, giveaway.id))
+      .catch(err => logger.warn(`[giveaways] finalisation ${giveaway.id} : ${err.message}`));
+
   if (delay <= 0) {
-    setImmediate(() => finaliseGiveaway(client, giveaway.id));
+    setImmediate(run);
     return null;
   }
 
   const handle = safeSetTimeout(delay, () => {
     schedules.delete(giveaway.id);
-    finaliseGiveaway(client, giveaway.id);
+    run();
   });
   schedules.set(giveaway.id, handle);
   return handle;

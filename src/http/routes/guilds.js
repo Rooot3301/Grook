@@ -59,15 +59,23 @@ export async function guildRoutes(fastify, { client }) {
     return getGuildConfig(request.params.id);
   });
 
-  fastify.patch('/api/guilds/:id/config', guard, async (request, reply) => {
-    const allowed = ['modlogs_channel_id', 'welcome_channel_id', 'vt_scanner'];
-    const updates = {};
-    for (const k of allowed) {
-      if (k in request.body) updates[k] = request.body[k];
-    }
-    if (!Object.keys(updates).length) return reply.code(400).send({ error: 'no_valid_fields' });
-    setGuildConfig(request.params.id, updates);
-    bus.publish('config:updated', request.params.id, updates);
+  fastify.patch('/api/guilds/:id/config', {
+    preHandler: [fastify.requireOwner, withGuild(client)],
+    schema: {
+      body: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          modlogs_channel_id: { type: ['string', 'null'], pattern: '^[0-9]{17,20}$' },
+          welcome_channel_id: { type: ['string', 'null'], pattern: '^[0-9]{17,20}$' },
+          vt_scanner:         { type: 'integer', enum: [0, 1] },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    if (!Object.keys(request.body).length) return reply.code(400).send({ error: 'no_valid_fields' });
+    setGuildConfig(request.params.id, request.body);
+    bus.publish('config:updated', request.params.id, request.body);
     return getGuildConfig(request.params.id);
   });
 

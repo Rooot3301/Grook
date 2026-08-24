@@ -92,15 +92,25 @@ async function launchVote(interaction, client, channelId) {
 
   const votePrefix    = `grookspy_vote_${Date.now()}`;
   state.voteIdPrefix  = votePrefix;
-  const row = new ActionRowBuilder();
-  for (const id of players) {
-    row.addComponents(new ButtonBuilder()
-      .setCustomId(`${votePrefix}_${id}`)
-      .setLabel(interaction.guild.members.cache.get(id)?.user.username ?? id.slice(0, 10))
-      .setStyle(ButtonStyle.Secondary));
-  }
 
-  await interaction.followUp({ embeds: [embed], components: [row] });
+  // Discord limite 5 boutons par ActionRow et 5 rows par message → 25 votes max.
+  // On tronque au-delà (peu probable, mais évite un refus API à 6+ joueurs).
+  const chunks = [];
+  for (let i = 0; i < Math.min(players.length, 25); i += 5) {
+    chunks.push(players.slice(i, i + 5));
+  }
+  const rows = chunks.map(chunk => {
+    const row = new ActionRowBuilder();
+    for (const id of chunk) {
+      row.addComponents(new ButtonBuilder()
+        .setCustomId(`${votePrefix}_${id}`)
+        .setLabel(interaction.guild.members.cache.get(id)?.user.username?.slice(0, 80) ?? id.slice(0, 10))
+        .setStyle(ButtonStyle.Secondary));
+    }
+    return row;
+  });
+
+  await interaction.followUp({ embeds: [embed], components: rows });
 
   for (const id of players) {
     client.interactionHandlers.set(`${votePrefix}_${id}`, async btn => {

@@ -1,10 +1,12 @@
+// IMPORTANT : dotenv doit être exécuté AVANT que les modules qui lisent
+// process.env (logger, config par serveur, etc.) soient importés. En ESM,
+// `import 'dotenv/config'` s'exécute avant les imports suivants.
+import 'dotenv/config';
+
 import { Client, GatewayIntentBits, Partials } from 'discord.js';
-import { config as loadEnv } from 'dotenv';
 import { loadCommands } from './loaders/commands.js';
 import { loadEvents } from './loaders/events.js';
 import { logger } from './utils/logger.js';
-
-loadEnv();
 
 if (!process.env.DISCORD_TOKEN) {
   logger.error('DISCORD_TOKEN manquant dans .env — arrêt.');

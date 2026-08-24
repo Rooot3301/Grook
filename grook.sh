@@ -58,11 +58,46 @@ pm2_status() {
 
 wait_online() {
   local timeout="$1" waited=0
+  # Étape 1 : process alive (PM2 ou PID)
   while (( waited < timeout )); do
     if has_pm2; then
-      [[ "$(pm2_status)" == "online" ]] && return 0
+      [[ "$(pm2_status)" == "online" ]] && break
     else
-      is_running_bare && return 0
+      is_running_bare && break
+    fi
+    sleep 1
+    waited=$(( waited + 1 ))
+  done
+  (( waited >= timeout )) && return 1
+
+  # Étape 2 : vraie readiness — Discord + DB via /api/health si dashboard.
+  local dash_on;   dash_on=$(sed -n 's/^DASHBOARD_ENABLED=//p' .env 2>/dev/null | head -1)
+  local dash_port; dash_port=$(sed -n 's/^DASHBOARD_PORT=//p' .env 2>/dev/null | head -1)
+  dash_port="${dash_port:-3000}"
+
+  if [[ "$dash_on" == "true" ]] && command -v curl &>/dev/null; then
+    while (( waited < timeout )); do
+      local resp; resp=$(curl -sf --max-time 2 "http://localhost:${dash_port}/api/health" 2>/dev/null)
+      if [[ -n "$resp" ]] && echo "$resp" | grep -q '"status":"ok"'; then
+        return 0
+      fi
+      sleep 1
+      waited=$(( waited + 1 ))
+    done
+    return 1
+  fi
+
+  # Étape 2 fallback (sans dashboard) : cherche la ligne "commande(s)
+  # enregistrée" dans les logs récents, signe que le bot a atteint 'ready'.
+  local log_target
+  if has_pm2; then
+    log_target=$(pm2 describe "$APP_NAME" 2>/dev/null | grep -oE '/[^ ]+\.log' | head -1)
+  fi
+  log_target="${log_target:-$LOG_FILE}"
+
+  while (( waited < timeout )); do
+    if [[ -f "$log_target" ]] && tail -n 100 "$log_target" 2>/dev/null | grep -q "commande(s) enregistrée"; then
+      return 0
     fi
     sleep 1
     waited=$(( waited + 1 ))
@@ -482,24 +517,22 @@ cmd_update() {
   ver_after=$(get_version)
   ok "Nouveau HEAD : $(git rev-parse --short HEAD) (v${ver_after})"
 
-  step "Dépendances"
-  if ! npm_install_deps "bot"; then
-    warn "Installation des dépendances a échoué — rollback en cours…"
+  step "Dépendances (npm ci strict — pas de fallback pour rester reproductible)"
+  if ! npm ci --omit=dev --no-audit --no-fund; then
+    warn "npm ci a échoué. Un lockfile désync ne doit pas être ignoré en update — rollback."
     _rollback "$before" "$ver_before"
-    die "Update annulé (npm)."
+    die "Update annulé (npm ci strict)."
   fi
 
-  # Rebuild dashboard si présent
+  # Rebuild dashboard si présent — npm ci strict aussi.
   if [[ -d "dashboard" && -f "dashboard/package.json" ]]; then
-    step "Rebuild dashboard"
-    (
-      cd dashboard || exit 1
-      if ! npm ci --no-audit --no-fund 2>&1 | tail -10; then
-        npm install --no-audit --no-fund || exit 1
-      fi
-      npm run build
-    ) && ok "Dashboard rebuild OK." \
-      || warn "Rebuild dashboard échoué — le bot continue sans."
+    step "Rebuild dashboard (npm ci strict)"
+    if ! (cd dashboard && npm ci --no-audit --no-fund && npm run build); then
+      warn "Rebuild dashboard échoué (lockfile ?) — rollback pour éviter d'exposer un front cassé."
+      _rollback "$before" "$ver_before"
+      die "Update annulé (dashboard)."
+    fi
+    ok "Dashboard rebuild OK."
   fi
 
   step "Restart et healthcheck (${HEALTHCHECK_TIMEOUT}s)"
