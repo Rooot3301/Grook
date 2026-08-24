@@ -571,18 +571,24 @@ cmd_dev() {
 }
 
 # Génère un JWT owner-scoped signé avec DASHBOARD_JWT_SECRET (utilitaire).
+# Script node en single-quoted here-string : secret/owner sont passés en env
+# pour éviter les cauchemars d'échappement bash/JS.
 _dash_jwt() {
   local secret owner
   secret=$(sed -n 's/^DASHBOARD_JWT_SECRET=//p' .env | head -1)
   owner=$(sed -n  's/^BOT_OWNER_ID=//p' .env | head -1)
   [[ -z "$secret" || -z "$owner" ]] && return 1
-  node -e "
-    const c = require('crypto');
-    const header  = Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url');
-    const payload = Buffer.from(JSON.stringify({userId:'${owner}',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+300})).toString('base64url');
-    const sig     = c.createHmac('sha256','${secret}').update(\`\${header}.\${payload}\`).digest('base64url');
-    process.stdout.write(\`\${header}.\${payload}.\${sig}\`);
-  "
+  GROOK_JWT_SECRET="$secret" GROOK_JWT_OWNER="$owner" node -e '
+    const c = require("crypto");
+    const secret = process.env.GROOK_JWT_SECRET;
+    const owner  = process.env.GROOK_JWT_OWNER;
+    const b64u   = (s) => Buffer.from(s).toString("base64url");
+    const header  = b64u(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+    const now     = Math.floor(Date.now() / 1000);
+    const payload = b64u(JSON.stringify({ userId: owner, iat: now, exp: now + 300 }));
+    const sig     = c.createHmac("sha256", secret).update(header + "." + payload).digest("base64url");
+    process.stdout.write(header + "." + payload + "." + sig);
+  '
 }
 
 _dash_call() {
@@ -612,7 +618,11 @@ cmd_sync() {
   local qs=""
   (( nuke )) && qs="?nuke=1"
 
-  step "Sync commands${nuke:+ (--nuke : wipe global + toutes guilds d'abord)}"
+  if (( nuke )); then
+    step "Sync commands (--nuke : wipe global + toutes guilds AVANT)"
+  else
+    step "Sync commands"
+  fi
   local resp; resp=$(_dash_call POST "/api/system/sync-commands${qs}") || return 1
   ok "Réponse : ${resp}"
 }
@@ -624,18 +634,19 @@ cmd_commands() {
     list)
       step "Inventaire Discord"
       local resp; resp=$(_dash_call GET /api/system/commands) || return 1
-      # Pretty-print via node
-      node -e "
+      # Pretty-print via node — script en single-quoted pour éviter l'échappement bash
+      node -e '
         const d = JSON.parse(process.argv[1]);
-        console.log('\n  GLOBAL (' + d.global.length + ' cmd) :');
-        for (const c of d.global) console.log('    /' + c.name + '  [' + c.id + ']');
-        console.log();
+        console.log("");
+        console.log("  GLOBAL (" + d.global.length + " cmd) :");
+        for (const c of d.global) console.log("    /" + c.name + "  [" + c.id + "]");
+        console.log("");
         for (const [gid, g] of Object.entries(d.guilds)) {
-          console.log('  ' + g.name + ' (' + gid + ') — ' + g.cmds.length + ' cmd :');
-          for (const c of g.cmds) console.log('    /' + c.name + '  [' + c.id + ']');
+          console.log("  " + g.name + " (" + gid + ") — " + g.cmds.length + " cmd :");
+          for (const c of g.cmds) console.log("    /" + c.name + "  [" + c.id + "]");
         }
-        console.log();
-      " "$resp"
+        console.log("");
+      ' "$resp"
       ;;
     wipe)
       step "Wipe TOUTES les commandes (global + guilds)"
