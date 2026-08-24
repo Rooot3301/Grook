@@ -25,10 +25,25 @@ export function getWarnsForGuild(guildId, { limit = 200 } = {}) {
   ).all(guildId, limit);
 }
 
-/** Supprime un avertissement par ID. */
+/** Supprime un avertissement par ID (sans vérification de guild). */
 export function removeWarn(id) {
   const row = db.prepare('SELECT * FROM warnings WHERE id = ?').get(id);
   if (!row) return null;
+  db.prepare('DELETE FROM warnings WHERE id = ?').run(id);
+  return row;
+}
+
+/**
+ * Supprime un warn seulement s'il appartient à la guild donnée.
+ * Retourne :
+ *   - null            : warn introuvable
+ *   - { wrongGuild }  : warn existe mais dans une autre guild → PAS supprimé
+ *   - la row          : suppression effectuée
+ */
+export function removeWarnIfInGuild(id, guildId) {
+  const row = db.prepare('SELECT * FROM warnings WHERE id = ?').get(id);
+  if (!row) return null;
+  if (row.guild_id !== guildId) return { wrongGuild: true, row };
   db.prepare('DELETE FROM warnings WHERE id = ?').run(id);
   return row;
 }

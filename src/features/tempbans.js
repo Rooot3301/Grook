@@ -18,19 +18,29 @@ export async function processExpiredTempBans(client) {
     try {
       const guild = client.guilds.cache.get(ban.guild_id);
       if (!guild) {
+        // Bot n'est plus sur cette guild — pas d'action possible, on nettoie.
         removeTempBan(ban.guild_id, ban.user_id);
         continue;
       }
 
+      // ── Tentative d'unban Discord ─────────────────────────────────────
+      let unbanState;   // 'success' | 'already-unbanned' | 'failed'
       try {
         await guild.members.unban(ban.user_id, 'Temp-ban expiré');
+        unbanState = 'success';
         logger.info(`[TempBan] Débanni ${ban.user_id} sur ${guild.name} (expiration)`);
       } catch (err) {
-        // Déjà débanni manuellement — on nettoie quand même
-        if (err.code !== 10026) {
-          logger.warn(`[TempBan] Impossible de débannir ${ban.user_id} sur ${guild.name}: ${err.message}`);
+        if (err.code === 10026) {           // Unknown Ban — déjà débanni manuellement
+          unbanState = 'already-unbanned';
+        } else {
+          unbanState = 'failed';
+          logger.warn(`[TempBan] Débannissement impossible pour ${ban.user_id} sur ${guild.name} : ${err.message}. On retry au prochain tick.`);
         }
       }
+
+      // Ne nettoie la DB que si l'unban a effectivement pris (ou n'était plus nécessaire).
+      // Sinon on laisse la ligne — le worker retentera dans 60s.
+      if (unbanState === 'failed') continue;
 
       removeTempBan(ban.guild_id, ban.user_id);
       bus.publish('tempban:expired', ban.guild_id, {

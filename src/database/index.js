@@ -55,6 +55,18 @@ db.exec(`
     next_case INTEGER NOT NULL DEFAULT 1
   );
 
+  -- Snapshot avant /panic on — pour restaurer l'état exact au /panic off.
+  -- Une ligne par (guild, channel). send_messages_overwrite vaut :
+  --   'unset' | 'true' | 'false' (état de l'overwrite everyone -> SendMessages).
+  CREATE TABLE IF NOT EXISTS panic_snapshots (
+    guild_id                TEXT NOT NULL,
+    channel_id              TEXT NOT NULL,
+    send_messages_overwrite TEXT NOT NULL,
+    rate_limit_per_user     INTEGER NOT NULL DEFAULT 0,
+    created_at              INTEGER DEFAULT (unixepoch()),
+    PRIMARY KEY (guild_id, channel_id)
+  );
+
   -- Automod : escalade auto sur seuils de warn, DÉSACTIVÉE par défaut.
   -- Chaque seuil est facultatif : NULL = pas d'escalade à ce niveau.
   CREATE TABLE IF NOT EXISTS automod_config (

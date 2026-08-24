@@ -1,8 +1,9 @@
 import { getGuildConfig, setGuildConfig, resetGuildConfig } from '../../database/repositories/GuildConfigRepository.js';
 import { getAllCases, removeCase } from '../../database/repositories/CaseRepository.js';
-import { getWarnsForGuild, removeWarn } from '../../database/repositories/WarnRepository.js';
+import { getWarnsForGuild, removeWarnIfInGuild } from '../../database/repositories/WarnRepository.js';
 import { getTempBansForGuild, removeTempBan } from '../../database/repositories/TempBanRepository.js';
-import { getGiveawaysForGuild, endGiveaway } from '../../database/repositories/GiveawayRepository.js';
+import { getGiveawaysForGuild, getGiveaway } from '../../database/repositories/GiveawayRepository.js';
+import { finaliseGiveaway } from '../../features/giveaways.js';
 import { getStatsForGuild } from '../../database/repositories/StatsRepository.js';
 import { getAutomodConfig, setAutomodConfig, resetAutomodConfig } from '../../database/repositories/AutomodRepository.js';
 import { bus } from '../events.js';
@@ -94,13 +95,11 @@ export async function guildRoutes(fastify, { client }) {
   });
 
   fastify.delete('/api/guilds/:id/warnings/:warnId', guard, async (request, reply) => {
-    const removed = removeWarn(Number(request.params.warnId));
-    if (!removed) return reply.code(404).send({ error: 'warn_not_found' });
-    if (removed.guild_id !== request.params.id) {
-      return reply.code(403).send({ error: 'wrong_guild' });
-    }
-    bus.publish('warn:removed', request.params.id, removed);
-    return { ok: true, removed };
+    const result = removeWarnIfInGuild(Number(request.params.warnId), request.params.id);
+    if (result === null)          return reply.code(404).send({ error: 'warn_not_found' });
+    if (result.wrongGuild === true) return reply.code(403).send({ error: 'wrong_guild' });
+    bus.publish('warn:removed', request.params.id, result);
+    return { ok: true, removed: result };
   });
 
   // Tempbans actifs
@@ -129,9 +128,17 @@ export async function guildRoutes(fastify, { client }) {
     return getGiveawaysForGuild(request.params.id);
   });
 
-  fastify.post('/api/guilds/:id/giveaways/:giveawayId/end', guard, async (request) => {
-    endGiveaway(Number(request.params.giveawayId));
-    bus.publish('giveaway:force-ended', request.params.id, { id: Number(request.params.giveawayId) });
+  fastify.post('/api/guilds/:id/giveaways/:giveawayId/end', guard, async (request, reply) => {
+    const gid = Number(request.params.giveawayId);
+    const g   = getGiveaway(gid);
+    if (!g)                              return reply.code(404).send({ error: 'giveaway_not_found' });
+    if (g.guild_id !== request.params.id) return reply.code(403).send({ error: 'wrong_guild' });
+    if (g.ended)                         return reply.code(409).send({ error: 'already_ended' });
+
+    // Finalisation complète : tire un gagnant, marque terminé, édite le message
+    // Discord, nettoie le bouton, publie sur le bus. Idempotent grâce au flag ended.
+    await finaliseGiveaway(client, gid);
+    bus.publish('giveaway:force-ended', request.params.id, { id: gid });
     return { ok: true };
   });
 
