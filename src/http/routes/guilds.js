@@ -1,6 +1,6 @@
 import { getGuildConfig, setGuildConfig, resetGuildConfig } from '../../database/repositories/GuildConfigRepository.js';
-import { getAllCases, removeCase } from '../../database/repositories/CaseRepository.js';
-import { getWarnsForGuild, removeWarnIfInGuild } from '../../database/repositories/WarnRepository.js';
+import { getAllCases, removeCase, countCases } from '../../database/repositories/CaseRepository.js';
+import { getWarnsForGuild, removeWarnIfInGuild, countWarnings } from '../../database/repositories/WarnRepository.js';
 import { getTempBansForGuild, removeTempBan } from '../../database/repositories/TempBanRepository.js';
 import { getGiveawaysForGuild, getGiveaway } from '../../database/repositories/GiveawayRepository.js';
 import { finaliseGiveaway } from '../../features/giveaways.js';
@@ -85,9 +85,15 @@ export async function guildRoutes(fastify, { client }) {
     return getGuildConfig(request.params.id);
   });
 
-  // Cases (casier de sanctions)
+  // Cases (paginé — accepte ?limit=&offset=)
   fastify.get('/api/guilds/:id/cases', guard, async (request) => {
-    return getAllCases(request.params.id);
+    const limit  = Math.min(500, Math.max(1, Number(request.query.limit)  || 100));
+    const offset = Math.max(0, Number(request.query.offset) || 0);
+    return {
+      total: countCases(request.params.id),
+      limit, offset,
+      items: getAllCases(request.params.id, { limit, offset }),
+    };
   });
 
   fastify.delete('/api/guilds/:id/cases/:caseId', guard, async (request, reply) => {
@@ -97,9 +103,15 @@ export async function guildRoutes(fastify, { client }) {
     return { ok: true, removed };
   });
 
-  // Warnings
+  // Warnings (paginé — accepte ?limit=&offset=)
   fastify.get('/api/guilds/:id/warnings', guard, async (request) => {
-    return getWarnsForGuild(request.params.id);
+    const limit  = Math.min(500, Math.max(1, Number(request.query.limit)  || 100));
+    const offset = Math.max(0, Number(request.query.offset) || 0);
+    return {
+      total: countWarnings(request.params.id),
+      limit, offset,
+      items: getWarnsForGuild(request.params.id, { limit, offset }),
+    };
   });
 
   fastify.delete('/api/guilds/:id/warnings/:warnId', guard, async (request, reply) => {

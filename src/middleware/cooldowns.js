@@ -1,6 +1,9 @@
-// Cooldowns en mémoire (Map<commandName, Map<userId, expiresAt>>)
+// Cooldowns en mémoire — clé composite (commandName, userId, guildId).
+// Un cooldown sur le serveur A ne bloque plus le même user sur le serveur B.
 // Éphémères : remis à zéro au redémarrage (volontaire).
-const cooldowns = new Map();
+const cooldowns = new Map(); // key -> expiresAt
+
+const makeKey = (cmd, userId, guildId) => `${cmd}|${userId}|${guildId ?? 'dm'}`;
 
 // Durées par commande (en secondes) — clé = nom top-level de la commande.
 const COOLDOWN_MAP = {
@@ -19,22 +22,19 @@ const COOLDOWN_MAP = {
 };
 const DEFAULT_COOLDOWN = 2;
 
-export function checkCooldown(commandName, userId) {
-  if (!cooldowns.has(commandName)) cooldowns.set(commandName, new Map());
-  const userMap   = cooldowns.get(commandName);
-  const expiresAt = userMap.get(userId) ?? 0;
+export function checkCooldown(commandName, userId, guildId = null) {
+  const key       = makeKey(commandName, userId, guildId);
+  const expiresAt = cooldowns.get(key) ?? 0;
   const now       = Date.now();
 
   if (now < expiresAt) {
     return { onCooldown: true, remaining: Math.ceil((expiresAt - now) / 1000) };
   }
-
-  if (expiresAt > 0) userMap.delete(userId);
+  if (expiresAt > 0) cooldowns.delete(key); // cleanup lazy
   return { onCooldown: false, remaining: 0 };
 }
 
-export function setCooldown(commandName, userId) {
-  if (!cooldowns.has(commandName)) cooldowns.set(commandName, new Map());
+export function setCooldown(commandName, userId, guildId = null) {
   const seconds = COOLDOWN_MAP[commandName] ?? DEFAULT_COOLDOWN;
-  cooldowns.get(commandName).set(userId, Date.now() + seconds * 1000);
+  cooldowns.set(makeKey(commandName, userId, guildId), Date.now() + seconds * 1000);
 }

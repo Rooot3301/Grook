@@ -21,7 +21,8 @@ export default {
       const command = client.commands.get(interaction.commandName);
       if (!command) return;
 
-      const { onCooldown, remaining } = checkCooldown(interaction.commandName, interaction.user.id);
+      const gid = interaction.guildId ?? null;
+      const { onCooldown, remaining } = checkCooldown(interaction.commandName, interaction.user.id, gid);
       if (onCooldown) {
         return interaction.reply({
           content: `⏱️ Attends encore **${remaining}s** avant de réutiliser \`/${interaction.commandName}\`.`,
@@ -29,7 +30,7 @@ export default {
         });
       }
 
-      setCooldown(interaction.commandName, interaction.user.id);
+      setCooldown(interaction.commandName, interaction.user.id, gid);
 
       try {
         await command.execute(interaction, client);

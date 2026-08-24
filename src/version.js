@@ -1,11 +1,29 @@
 // Source unique de vérité pour la version du bot.
 // Incrémentez VERSION à chaque release.
 
-export const VERSION    = '2.6.0';
+export const VERSION    = '2.7.0';
 export const BUILD_DATE = '2026-08-21';
 
 // Changelog compact — dernières entrées en tête
 export const CHANGELOG = [
+  { version: '2.7.0', date: '2026-08-21', changes: [
+    'P0: tempban ne purge la DB que si l\'unban Discord a réussi',
+    'P0: /panic on snapshot chaque salon, /panic off restaure exactement',
+    'P0: force-end giveaway dashboard = pipeline complet (finaliseGiveaway)',
+    'P0: suppression warn contrôle guild AVANT DELETE (removeWarnIfInGuild)',
+    'P1: dotenv importé AVANT tout module (fix LOG_LEVEL/LOG_FORMAT ignorés)',
+    'P1: reminder retiré de la DB seulement si l\'envoi a réussi',
+    'P1: healthcheck update = ping /api/health ou parse "commande enregistrée"',
+    'P1: npm ci strict pendant update, rollback en cas de lock désync',
+    'P1: timers async wrappés en .catch (plus d\'unhandledRejection fatal)',
+    'P1: spy à 6+ joueurs — split en plusieurs ActionRow',
+    'P1: liar deadlock — abandonTimer 5min si modal non soumis',
+    'P1: validation stricte JSON schema sur PATCH /api/guilds/:id/config',
+    'P2: cooldowns par (cmd, user, guild) au lieu de (cmd, user)',
+    'P2: pagination endpoints /cases /warnings (limit/offset + total)',
+    'P2: log rotation basique (>10MB → grook.log.1)',
+    'P2: GitHub Actions CI (syntax + tests + dashboard build)',
+  ] },
   { version: '2.6.0', date: '2026-08-21', changes: [
     '/help : autocomplete sur nom de commande + détail au choix',
     '/help : pagination par catégorie avec boutons de navigation',

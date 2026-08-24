@@ -42,11 +42,16 @@ export function getCasesForUser(guildId, userId) {
   ).all(guildId, userId);
 }
 
-/** Récupère tous les cas d'un serveur (récents en premier). */
-export function getAllCases(guildId, { limit = 200 } = {}) {
+/** Récupère les cas d'un serveur (récents en premier), paginé. */
+export function getAllCases(guildId, { limit = 200, offset = 0 } = {}) {
   return db.prepare(
-    `SELECT * FROM cases WHERE guild_id = ? ${ORDER_RECENT} LIMIT ?`
-  ).all(guildId, limit);
+    `SELECT * FROM cases WHERE guild_id = ? ${ORDER_RECENT} LIMIT ? OFFSET ?`
+  ).all(guildId, limit, offset);
+}
+
+/** Nombre total de cas pour un serveur (pour la pagination). */
+export function countCases(guildId) {
+  return db.prepare('SELECT COUNT(*) AS c FROM cases WHERE guild_id = ?').get(guildId).c;
 }
 
 /** Récupère un cas par son ID. */

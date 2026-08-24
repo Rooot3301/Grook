@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  bot:
+    name: Bot — syntax + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install (dev)
+        run: npm ci --no-audit --no-fund
+
+      - name: Syntax check
+        run: |
+          find src tests -name '*.js' | while read f; do
+            node --check "$f" || exit 1
+          done
+
+      - name: Vitest
+        run: npm test
+
+  dashboard:
+    name: Dashboard — build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: dashboard/package-lock.json
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm run build

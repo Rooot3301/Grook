@@ -5,7 +5,7 @@ import { useGuildData, formatRelative } from '../components/useGuildData.js';
 
 export function Overview() {
   const { guildId } = useParams();
-  const cases     = useGuildData((id, signal) => api.cases(id).then(a => a.slice(0, 6)));
+  const cases     = useGuildData((id) => api.cases(id).then(r => (r.items ?? r).slice(0, 6)));
   const tempbans  = useGuildData((id) => api.tempbans(id));
   const giveaways = useGuildData((id) => api.giveaways(id).then(a => a.filter(g => !g.ended)));
 

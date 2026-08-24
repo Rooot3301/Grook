@@ -38,7 +38,7 @@ export function Moderation() {
 
 function CasesTab() {
   const { guildId } = useParams();
-  const q = useGuildData((id) => api.cases(id));
+  const q = useGuildData((id) => api.cases(id).then(r => r.items ?? r));
   if (q.loading) return <LoadingRow />;
   if (!q.data?.length) return <div className="panel p-6 text-center text-text-dim">Aucune sanction enregistrée.</div>;
 
@@ -81,7 +81,7 @@ function CasesTab() {
 
 function WarningsTab() {
   const { guildId } = useParams();
-  const q = useGuildData((id) => api.warnings(id));
+  const q = useGuildData((id) => api.warnings(id).then(r => r.items ?? r));
   if (q.loading) return <LoadingRow />;
   if (!q.data?.length) return <div className="panel p-6 text-center text-text-dim">Aucun avertissement.</div>;
 

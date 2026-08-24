@@ -14,10 +14,19 @@ const BUFFER_MAX = 500;
 const buffer = [];
 
 // Écriture asynchrone dans logs/grook.log au format JSON (une entrée = une ligne).
-// Le fichier peut être tailé/rotationné indépendamment du process.
+// Rotation "simple" au démarrage : si le fichier dépasse LOG_MAX_BYTES,
+// on le renomme en grook.log.1 (en écrasant l'ancien .1) et on démarre neuf.
+// Rotation externe (logrotate, PM2's out/error) reste possible sans conflit.
+const LOG_MAX_BYTES = Number(process.env.LOG_MAX_BYTES) || 10 * 1024 * 1024; // 10 MB
 let writeStream = null;
 try {
   fs.mkdirSync(LOG_DIR, { recursive: true });
+  try {
+    const st = fs.statSync(LOG_FILE);
+    if (st.size >= LOG_MAX_BYTES) {
+      fs.renameSync(LOG_FILE, LOG_FILE + '.1');
+    }
+  } catch { /* pas de fichier existant */ }
   writeStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
 } catch { /* pas de logs sur disque — on continue en mémoire */ }
 
