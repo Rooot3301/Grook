@@ -15,10 +15,30 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const target  = interaction.options.getUser('user', true);
   const newNick = interaction.options.getString('pseudo')?.trim() || null;
-  const member  = await interaction.guild.members.fetch(target.id).catch(() => null);
 
+  // Anti-self : pas de sens
+  if (target.id === interaction.client.user.id) {
+    return interaction.reply({ embeds: [errorEmbed('Je ne peux pas changer mon propre pseudo via cette commande.')], ephemeral: true });
+  }
+
+  const member = await interaction.guild.members.fetch(target.id).catch(() => null);
   if (!member) return interaction.reply({ embeds: [errorEmbed('Utilisateur introuvable.')], ephemeral: true });
-  if (!member.manageable) return interaction.reply({ embeds: [errorEmbed('Je ne peux pas modifier le pseudo de cet utilisateur.')], ephemeral: true });
+
+  // Faisabilité côté bot
+  if (!member.manageable) {
+    return interaction.reply({ embeds: [errorEmbed('Je ne peux pas modifier ce pseudo (rôle égal ou supérieur au mien).')], ephemeral: true });
+  }
+
+  // Hiérarchie modo/cible — sans ça un modo pourrait renommer un admin plus haut placé.
+  // Exception : la personne se renomme elle-même (autorisé).
+  const isSelf = target.id === interaction.user.id;
+  if (!isSelf && member.roles.highest.position >= interaction.member.roles.highest.position) {
+    return interaction.reply({ embeds: [errorEmbed('Cet utilisateur a un rôle égal ou supérieur au tien.')], ephemeral: true });
+  }
+  // Protection du owner : jamais renommable par une commande.
+  if (target.id === interaction.guild.ownerId) {
+    return interaction.reply({ embeds: [errorEmbed('Le propriétaire du serveur ne peut pas être renommé via une commande.')], ephemeral: true });
+  }
 
   const before = member.displayName;
   try {

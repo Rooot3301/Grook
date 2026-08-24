@@ -16,20 +16,39 @@ export async function execute(interaction) {
   const guard = await runSanctionGuards(interaction, target, 'bannable');
   if (!guard.ok) return;
 
-  // Ban avec purge 7j puis unban immédiat. Si l'unban échoue, on prévient au moins.
-  await interaction.guild.members.ban(target.id, { reason, deleteMessageSeconds: 7 * 24 * 60 * 60 });
+  // Étape 1 : ban avec purge 7j
   try {
-    await interaction.guild.members.unban(target.id, 'Softban — unban automatique');
+    await interaction.guild.members.ban(target.id, { reason, deleteMessageSeconds: 7 * 24 * 60 * 60 });
   } catch (err) {
-    logger.error(`[softban] Unban automatique échoué pour ${target.id} : ${err.message}`);
     return interaction.reply({
-      content: `⚠️ **${target.tag}** a été banni mais l'unban automatique a échoué. Débannis manuellement via \`/unban ${target.id}\`.`,
+      content: `❌ Discord a refusé le ban : \`${err.message}\`. Aucun changement.`,
       ephemeral: true,
     });
   }
+
+  // Étape 2 : unban immédiat (softban = ban éphémère qui purge)
+  // Peu importe le résultat, on finalize le case pour tracer l'action.
+  // Si l'unban échoue, on notifie le modo qui pourra unban manuellement via /unban.
+  let unbanOk = false;
+  try {
+    await interaction.guild.members.unban(target.id, 'Softban — unban automatique');
+    unbanOk = true;
+  } catch (err) {
+    logger.error(`[softban] Unban auto échoué pour ${target.id} : ${err.message}. Le case est finalisé, unban à faire à la main.`);
+  }
+
   notifyTarget(target, interaction.guild.name,
     `🧹 Tu as été **softban** (messages 7 derniers jours supprimés).\n> Raison : ${reason}`);
 
-  const { embed } = await finalizeSanction(interaction, { action: 'SOFTBAN', target, reason });
-  await interaction.reply({ embeds: [embed] });
+  // Finalisation du case dans TOUS les cas — l'action est traçable.
+  const { embed } = await finalizeSanction(interaction, {
+    action: 'SOFTBAN', target, reason,
+    extra: unbanOk ? undefined : { '⚠️ État': 'Unban auto ÉCHOUÉ — utilise `/unban`' },
+  });
+
+  await interaction.reply({
+    embeds: [embed],
+    content: unbanOk ? undefined
+      : `⚠️ Le softban a été **appliqué mais l'unban automatique a échoué**. Débannis manuellement via \`/unban userid:${target.id}\`.`,
+  });
 }

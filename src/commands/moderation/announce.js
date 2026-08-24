@@ -36,6 +36,19 @@ export async function execute(interaction) {
     return interaction.reply({ embeds: [errorEmbed('Ce salon ne supporte pas les messages.')], ephemeral: true });
   }
 
+  // Escalade : ping:true nécessite ExplicitEveryone chez l'appelant.
+  // Sinon un modo ManageMessages pourrait faire proxy d'un @everyone qu'il
+  // n'aurait pas le droit d'envoyer normalement.
+  if (doPing) {
+    const callerPerms = channel.permissionsFor(interaction.member);
+    if (!callerPerms?.has(PermissionFlagsBits.MentionEveryone)) {
+      return interaction.reply({
+        embeds: [errorEmbed('`ping:true` nécessite la permission **Mention @everyone** sur le salon cible.')],
+        ephemeral: true,
+      });
+    }
+  }
+
   let color = COLORS.INFO;
   if (couleur) {
     const parsed = parseInt(couleur.replace('#', ''), 16);

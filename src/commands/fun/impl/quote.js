@@ -1,4 +1,4 @@
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { COLORS, errorEmbed } from '../../../utils/embeds.js';
 
 export async function execute(interaction) {
@@ -25,6 +25,18 @@ export async function execute(interaction) {
   const channel = interaction.guild.channels.cache.get(channelId);
   if (!channel?.isTextBased()) {
     return interaction.reply({ embeds: [errorEmbed('Salon introuvable ou non textuel dans ce serveur.')], ephemeral: true });
+  }
+
+  // ── Vérification perms de L'APPELANT sur le salon cible ────────────────────
+  // Sans ça, un membre pourrait exfiltrer un message d'un salon staff qu'il
+  // ne voit pas mais dont il connaît l'ID.
+  const callerPerms = channel.permissionsFor(interaction.member);
+  if (!callerPerms?.has(PermissionFlagsBits.ViewChannel) ||
+      !callerPerms?.has(PermissionFlagsBits.ReadMessageHistory)) {
+    return interaction.reply({
+      embeds: [errorEmbed('Tu n\'as pas accès à ce salon (ViewChannel + ReadMessageHistory requis).')],
+      ephemeral: true,
+    });
   }
 
   let message;
