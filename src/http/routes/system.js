@@ -1,6 +1,6 @@
 import db from '../../database/index.js';
 import { getRecentLogs } from '../../utils/logger.js';
-import { syncCommands } from '../../loaders/commands.js';
+import { syncCommands, inventoryCommands, nukeCommands } from '../../loaders/commands.js';
 import { VERSION, BUILD_DATE } from '../../version.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -61,7 +61,19 @@ export async function systemRoutes(fastify, { client }) {
   });
 
   // ── Force-sync des slash commands (utile pour vider les résidus) ────────
-  fastify.post('/api/system/sync-commands', { preHandler: fastify.requireOwner }, async () => {
-    return await syncCommands(client);
+  // ?nuke=1 → wipe TOUT (global + toutes guilds) AVANT de republier.
+  fastify.post('/api/system/sync-commands', { preHandler: fastify.requireOwner }, async (request) => {
+    const nuke = request.query.nuke === '1' || request.query.nuke === 'true';
+    return await syncCommands(client, null, { nuke });
+  });
+
+  // ── Inventaire des commandes actuellement enregistrées côté Discord ─────
+  fastify.get('/api/system/commands', { preHandler: fastify.requireOwner }, async () => {
+    return await inventoryCommands(client);
+  });
+
+  // ── Wipe SANS republier (nettoyage explicite) ───────────────────────────
+  fastify.post('/api/system/commands/wipe', { preHandler: fastify.requireOwner }, async () => {
+    return { wiped: await nukeCommands(client) };
   });
 }

@@ -570,44 +570,85 @@ cmd_dev() {
   node --watch src/index.js
 }
 
-# Force-re-publie les slash commands sur Discord et wipe les résidus.
-# Passe par l'API /api/system/sync-commands du dashboard (auth owner via cookie
-# ephemeral n'est pas possible en CLI → on utilise un token JWT signé à la volée).
-# Fallback si le dashboard n'est pas activé : suggère un restart.
-cmd_sync() {
+# Génère un JWT owner-scoped signé avec DASHBOARD_JWT_SECRET (utilitaire).
+_dash_jwt() {
+  local secret owner
+  secret=$(sed -n 's/^DASHBOARD_JWT_SECRET=//p' .env | head -1)
+  owner=$(sed -n  's/^BOT_OWNER_ID=//p' .env | head -1)
+  [[ -z "$secret" || -z "$owner" ]] && return 1
+  node -e "
+    const c = require('crypto');
+    const header  = Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({userId:'${owner}',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+300})).toString('base64url');
+    const sig     = c.createHmac('sha256','${secret}').update(\`\${header}.\${payload}\`).digest('base64url');
+    process.stdout.write(\`\${header}.\${payload}.\${sig}\`);
+  "
+}
+
+_dash_call() {
+  local method="$1" path="$2"
   local dash_on;   dash_on=$(sed -n 's/^DASHBOARD_ENABLED=//p' .env 2>/dev/null | head -1)
   local dash_port; dash_port=$(sed -n 's/^DASHBOARD_PORT=//p' .env 2>/dev/null | head -1)
   dash_port="${dash_port:-3000}"
 
   if [[ "$dash_on" != "true" ]]; then
     warn "Le dashboard n'est pas activé (DASHBOARD_ENABLED != true)."
-    info "Sans dashboard, un './grook.sh restart' force le re-sync au boot."
+    info "Sans dashboard, un './grook.sh restart' force un re-sync au boot."
     return 1
   fi
+  local jwt; jwt=$(_dash_jwt) || die "DASHBOARD_JWT_SECRET ou BOT_OWNER_ID manquant dans .env."
 
-  # Génère un JWT owner-scoped signé avec DASHBOARD_JWT_SECRET
-  local secret owner
-  secret=$(sed -n 's/^DASHBOARD_JWT_SECRET=//p' .env | head -1)
-  owner=$(sed -n  's/^BOT_OWNER_ID=//p' .env | head -1)
-  [[ -z "$secret" || -z "$owner" ]] && die "DASHBOARD_JWT_SECRET ou BOT_OWNER_ID manquant dans .env."
+  curl -sf --max-time 30 -X "$method" "http://localhost:${dash_port}${path}" \
+    -H "Cookie: grook_session=${jwt}" 2>&1
+}
 
-  local jwt
-  jwt=$(node -e "
-    const c = require('crypto');
-    const header  = Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url');
-    const payload = Buffer.from(JSON.stringify({userId:'${owner}',iat:Math.floor(Date.now()/1000),exp:Math.floor(Date.now()/1000)+300})).toString('base64url');
-    const sig     = c.createHmac('sha256','${secret}').update(\`\${header}.\${payload}\`).digest('base64url');
-    process.stdout.write(\`\${header}.\${payload}.\${sig}\`);
-  ")
+# Force la re-publication des slash commands.
+#   ./grook.sh sync            → publie sur le scope courant + wipe l'opposé
+#   ./grook.sh sync --nuke     → wipe TOUT (global + toutes guilds) puis publie
+cmd_sync() {
+  local nuke=0
+  [[ "${1:-}" == "--nuke" ]] && nuke=1
 
-  step "Sync commands"
-  local resp; resp=$(curl -sf -X POST "http://localhost:${dash_port}/api/system/sync-commands" \
-    -H "Cookie: grook_session=${jwt}" 2>&1)
-  if [[ -z "$resp" ]]; then
-    err "L'API n'a pas répondu. Le bot tourne bien avec le dashboard activé ?"
-    return 1
-  fi
+  local qs=""
+  (( nuke )) && qs="?nuke=1"
+
+  step "Sync commands${nuke:+ (--nuke : wipe global + toutes guilds d'abord)}"
+  local resp; resp=$(_dash_call POST "/api/system/sync-commands${qs}") || return 1
   ok "Réponse : ${resp}"
+}
+
+# Diagnostic — liste ce qui est actuellement enregistré côté Discord.
+cmd_commands() {
+  local action="${1:-list}"
+  case "$action" in
+    list)
+      step "Inventaire Discord"
+      local resp; resp=$(_dash_call GET /api/system/commands) || return 1
+      # Pretty-print via node
+      node -e "
+        const d = JSON.parse(process.argv[1]);
+        console.log('\n  GLOBAL (' + d.global.length + ' cmd) :');
+        for (const c of d.global) console.log('    /' + c.name + '  [' + c.id + ']');
+        console.log();
+        for (const [gid, g] of Object.entries(d.guilds)) {
+          console.log('  ' + g.name + ' (' + gid + ') — ' + g.cmds.length + ' cmd :');
+          for (const c of g.cmds) console.log('    /' + c.name + '  [' + c.id + ']');
+        }
+        console.log();
+      " "$resp"
+      ;;
+    wipe)
+      step "Wipe TOUTES les commandes (global + guilds)"
+      warn "Cette action ne re-publie PAS. Utilise './grook.sh sync' derrière pour republier."
+      read -r -p "  Confirmer ? [y/N] " ans
+      [[ "$ans" =~ ^[Yy] ]] || { info "Annulé."; return 0; }
+      local resp; resp=$(_dash_call POST /api/system/commands/wipe) || return 1
+      ok "Réponse : ${resp}"
+      ;;
+    *)
+      err "Usage : ./grook.sh commands [list|wipe]"
+      return 1 ;;
+  esac
 }
 
 cmd_help() {
@@ -632,8 +673,12 @@ cmd_help() {
     update           Update depuis GitHub :
                        git fetch → backup DB → git pull --ff-only
                        → npm ci → restart → healthcheck → rollback si fail
-    sync             Force la re-publication des slash commands + wipe
-                       les résidus (nécessite le dashboard activé)
+    sync [--nuke]    Force la re-publication des slash commands. --nuke
+                       wipe global + toutes guilds AVANT de publier —
+                       ultime remède aux commandes fantômes.
+    commands list    Liste les slash commands actuellement enregistrées
+                       côté Discord (global + par guild)
+    commands wipe    Wipe TOUT côté Discord (sans republier)
 
   ${BOLD}Divers${NC}
     help             Cette aide
@@ -660,7 +705,8 @@ case "$COMMAND" in
   backup)           cmd_backup ;;
   update)           cmd_update ;;
   dev)              cmd_dev ;;
-  sync)             cmd_sync ;;
+  sync)             cmd_sync "$@" ;;
+  commands)         cmd_commands "$@" ;;
   help|--help|-h)   cmd_help ;;
   *)
     err "Commande inconnue : '${COMMAND}'"

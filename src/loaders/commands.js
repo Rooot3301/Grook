@@ -44,6 +44,54 @@ export async function loadCommands(client) {
 }
 
 /**
+ * Inventaire des commandes actuellement enregistrées côté Discord.
+ * Retourne { global: [{name}], guilds: { [gid]: { name, cmds: [{name}] } } }
+ */
+export async function inventoryCommands(client) {
+  const inv = { global: [], guilds: {} };
+  try {
+    const g = await client.application.commands.fetch();
+    inv.global = [...g.values()].map(c => ({ name: c.name, id: c.id }));
+  } catch (err) { logger.warn(`[commands] Fetch global : ${err.message}`); }
+
+  for (const [gid, guild] of client.guilds.cache) {
+    try {
+      const g = await guild.commands.fetch();
+      inv.guilds[gid] = { name: guild.name, cmds: [...g.values()].map(c => ({ name: c.name, id: c.id })) };
+    } catch (err) { logger.warn(`[commands] Fetch guild ${gid} : ${err.message}`); }
+  }
+  return inv;
+}
+
+/**
+ * Wipe TOUTES les commandes — global + chaque guild.
+ * Utilisé par `./grook.sh sync --nuke` pour repartir d'un état vierge.
+ */
+export async function nukeCommands(client) {
+  const wiped = [];
+  try {
+    const g = await client.application.commands.fetch();
+    if (g.size > 0) {
+      await client.application.commands.set([]);
+      logger.info(`[commands] NUKE global : ${g.size} commande(s) supprimée(s).`);
+      wiped.push({ scope: 'global', count: g.size });
+    }
+  } catch (err) { logger.warn(`[commands] NUKE global échoué : ${err.message}`); }
+
+  for (const [gid, guild] of client.guilds.cache) {
+    try {
+      const g = await guild.commands.fetch();
+      if (g.size > 0) {
+        await guild.commands.set([]);
+        logger.info(`[commands] NUKE guild ${guild.name} (${gid}) : ${g.size} commande(s).`);
+        wiped.push({ scope: 'guild', guildId: gid, name: guild.name, count: g.size });
+      }
+    } catch (err) { logger.warn(`[commands] NUKE guild ${gid} échoué : ${err.message}`); }
+  }
+  return wiped;
+}
+
+/**
  * Publie les commandes courantes sur Discord et **wipe le scope opposé** pour
  * éviter les résidus de commandes fantômes.
  *
@@ -51,16 +99,23 @@ export async function loadCommands(client) {
  * - sinon             → publie global, wipe la guild active pour chaque guild
  *                       où le bot est présent.
  *
- * Retourne un résumé structuré (utilisable par un futur endpoint API).
+ * Options :
+ *   { nuke: true }    → wipe global + toutes les guilds AVANT publish
+ *
+ * Retourne un résumé structuré.
  */
-export async function syncCommands(client, defs = null) {
-  // Si defs pas fourni, on relit depuis client.commands (état courant).
+export async function syncCommands(client, defs = null, opts = {}) {
   if (!defs) {
     defs = [...client.commands.values()].map(c => c.data.toJSON());
   }
 
   const devGuildId = process.env.DEV_GUILD_ID?.trim();
-  const summary = { scope: null, published: 0, wiped: [] };
+  const summary = { scope: null, published: 0, wiped: [], nuked: false };
+
+  if (opts.nuke) {
+    summary.wiped.push(...(await nukeCommands(client)));
+    summary.nuked = true;
+  }
 
   if (devGuildId) {
     const guild = client.guilds.cache.get(devGuildId);
@@ -77,36 +132,38 @@ export async function syncCommands(client, defs = null) {
     summary.scope = 'guild';
     summary.published = defs.length;
 
-    // Wipe global pour éviter double registration
-    try {
-      const existing = await client.application.commands.fetch();
-      if (existing.size > 0) {
-        await client.application.commands.set([]);
-        logger.info(`[commands] Global wipe : ${existing.size} commande(s) globale(s) supprimée(s).`);
-        summary.wiped.push({ scope: 'global', count: existing.size });
+    if (!opts.nuke) {
+      try {
+        const existing = await client.application.commands.fetch();
+        if (existing.size > 0) {
+          await client.application.commands.set([]);
+          logger.info(`[commands] Global wipe : ${existing.size} commande(s) globale(s) supprimée(s).`);
+          summary.wiped.push({ scope: 'global', count: existing.size });
+        }
+      } catch (err) {
+        logger.warn(`[commands] Wipe global échoué : ${err.message}`);
       }
-    } catch (err) {
-      logger.warn(`[commands] Wipe global échoué : ${err.message}`);
     }
     return summary;
   }
 
-  // Mode global : publie global + wipe chaque guild
   await client.application.commands.set(defs);
   logger.info(`[commands] ${defs.length} commande(s) publiée(s) globalement.`);
   summary.scope = 'global';
   summary.published = defs.length;
 
-  for (const [gid, guild] of client.guilds.cache) {
-    try {
-      const existing = await guild.commands.fetch();
-      if (existing.size > 0) {
-        await guild.commands.set([]);
-        logger.info(`[commands] Guild wipe : ${existing.size} commande(s) supprimée(s) sur ${guild.name} (${gid}).`);
-        summary.wiped.push({ scope: 'guild', guildId: gid, count: existing.size });
+  if (!opts.nuke) {
+    for (const [gid, guild] of client.guilds.cache) {
+      try {
+        const existing = await guild.commands.fetch();
+        if (existing.size > 0) {
+          await guild.commands.set([]);
+          logger.info(`[commands] Guild wipe : ${existing.size} commande(s) supprimée(s) sur ${guild.name} (${gid}).`);
+          summary.wiped.push({ scope: 'guild', guildId: gid, count: existing.size });
+        }
+      } catch (err) {
+        logger.warn(`[commands] Guild wipe échoué pour ${gid} : ${err.message}`);
       }
-    } catch (err) {
-      logger.warn(`[commands] Guild wipe échoué pour ${gid} : ${err.message}`);
     }
   }
   return summary;
