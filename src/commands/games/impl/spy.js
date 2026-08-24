@@ -58,16 +58,32 @@ async function startSpy(interaction, client, channelId) {
 
   state.undercover = players[Math.floor(Math.random() * players.length)];
 
+  const dmFailed = [];
   for (const id of players) {
     try {
       const word = id === state.undercover ? state.words.undercover : state.words.base;
       const user = await client.users.fetch(id);
       await user.send(`🎯 Ton mot : **${word}**\nDonne un indice en **un mot** dans le salon sans révéler ton mot !`);
-    } catch { /* DMs désactivés */ }
+    } catch {
+      dmFailed.push(id);
+    }
+  }
+
+  // Si trop de joueurs ont leurs DM fermés (>1/3), on annule proprement.
+  if (dmFailed.length >= Math.ceil(players.length / 3)) {
+    activeSpies.delete(channelId);
+    return interaction.followUp({
+      content: `❌ Partie annulée : trop de joueurs (${dmFailed.length}/${players.length}) ont les DM fermés. ${dmFailed.map(id => `<@${id}>`).join(', ')} → activez les DM pour jouer.`,
+      allowedMentions: { users: dmFailed },
+    });
   }
 
   try { await interaction.editReply({ components: [] }); } catch { /* ignore */ }
-  await interaction.followUp({ content: `📬 Les mots ont été distribués par DM. Chaque joueur doit maintenant donner un **indice en un mot** dans ce salon.`, allowedMentions: { users: players } });
+  let msg = `📬 Les mots ont été distribués par DM. Chaque joueur doit maintenant donner un **indice en un mot** dans ce salon.`;
+  if (dmFailed.length > 0) {
+    msg += `\n⚠️ DM injoignables pour : ${dmFailed.map(id => `<@${id}>`).join(', ')} — ces joueurs ne pourront pas participer utilement.`;
+  }
+  await interaction.followUp({ content: msg, allowedMentions: { users: players } });
 
   const filter    = m => !m.author.bot && state.players.has(m.author.id) && !state.clues.has(m.author.id);
   const collector = interaction.channel.createMessageCollector({ filter, time: 60_000 });

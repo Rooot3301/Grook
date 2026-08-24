@@ -12,11 +12,11 @@ export const data = new SlashCommandBuilder()
   .setName('poll')
   .setDescription('Créer un sondage avec jusqu\'à 4 options.')
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-  .addStringOption(o => o.setName('question').setDescription('Question du sondage').setRequired(true))
-  .addStringOption(o => o.setName('option1').setDescription('Option 1').setRequired(true))
-  .addStringOption(o => o.setName('option2').setDescription('Option 2').setRequired(true))
-  .addStringOption(o => o.setName('option3').setDescription('Option 3 (facultatif)').setRequired(false))
-  .addStringOption(o => o.setName('option4').setDescription('Option 4 (facultatif)').setRequired(false))
+  .addStringOption(o => o.setName('question').setDescription('Question du sondage (max 200)').setRequired(true).setMaxLength(200))
+  .addStringOption(o => o.setName('option1').setDescription('Option 1 (max 80)').setRequired(true).setMaxLength(80))
+  .addStringOption(o => o.setName('option2').setDescription('Option 2 (max 80)').setRequired(true).setMaxLength(80))
+  .addStringOption(o => o.setName('option3').setDescription('Option 3 (facultatif, max 80)').setRequired(false).setMaxLength(80))
+  .addStringOption(o => o.setName('option4').setDescription('Option 4 (facultatif, max 80)').setRequired(false).setMaxLength(80))
   .addIntegerOption(o => o.setName('duree').setDescription('Durée en minutes (défaut : 5)').setMinValue(1).setMaxValue(60).setRequired(false));
 
 const OPTION_EMOJIS = ['🇦', '🇧', '🇨', '🇩'];

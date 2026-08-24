@@ -45,10 +45,16 @@ async function userInfo(interaction, client) {
   const member = await interaction.guild.members.fetch(target.id).catch(() => null);
   const gid    = interaction.guild.id;
 
-  const warns    = getWarnsForUser(gid, target.id);
-  const cases    = getCasesForUser(gid, target.id);
-  const tempban  = getTempBan(gid, target.id);
-  const afk      = getAfk(target.id, gid);
+  // Les infos modération (warns, cases, tempban actif, mute actif) sont
+  // sensibles — on ne les affiche que si l'appelant a Kick Members
+  // OU si la cible c'est lui-même.
+  const isSelf     = target.id === interaction.user.id;
+  const canSeeMod  = isSelf || interaction.memberPermissions.has(PermissionFlagsBits.KickMembers);
+
+  const warns    = canSeeMod ? getWarnsForUser(gid, target.id) : [];
+  const cases    = canSeeMod ? getCasesForUser(gid, target.id) : [];
+  const tempban  = canSeeMod ? getTempBan(gid, target.id)      : null;
+  const afk      = getAfk(target.id, gid); // AFK est publique
 
   const embed = new EmbedBuilder()
     .setColor(member?.displayHexColor ?? COLORS.INFO)
@@ -76,26 +82,30 @@ async function userInfo(interaction, client) {
     embed.setFooter({ text: 'Cet utilisateur n\'est pas dans ce serveur.' });
   }
 
-  // ── Bloc de synthèse modération ─────────────────────────────────────────
-  const modLines = [];
-  modLines.push(`⚠️ **Warns actifs** : \`${warns.length}\``);
-  if (cases.length) {
-    const latest = cases[0];
-    modLines.push(`📋 **Casier** : \`${cases.length}\` cas — dernier \`${latest.type}\` <t:${latest.created_at}:R>`);
-  } else {
-    modLines.push('📋 **Casier** : vide');
+  // ── Bloc de synthèse modération (visible uniquement si Kick Members) ─────
+  if (canSeeMod) {
+    const modLines = [];
+    modLines.push(`⚠️ **Warns actifs** : \`${warns.length}\``);
+    if (cases.length) {
+      const latest = cases[0];
+      modLines.push(`📋 **Casier** : \`${cases.length}\` cas — dernier \`${latest.type}\` <t:${latest.created_at}:R>`);
+    } else {
+      modLines.push('📋 **Casier** : vide');
+    }
+    if (tempban) {
+      modLines.push(`⏳ **Temp-ban actif** — expire <t:${tempban.expires_at}:R>`);
+    }
+    if (member?.communicationDisabledUntil) {
+      modLines.push(`🔇 **Mute actif** — expire <t:${Math.floor(member.communicationDisabledUntil.getTime() / 1000)}:R>`);
+    }
+    if (afk) {
+      modLines.push(`💤 **AFK** — ${afk.reason} (depuis <t:${afk.set_at}:R>)`);
+    }
+    embed.addFields({ name: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', value: modLines.join('\n'), inline: false });
+  } else if (afk) {
+    // Sans les perms modo, on affiche seulement l'AFK (info publique).
+    embed.addFields({ name: '💤 AFK', value: `${afk.reason} (depuis <t:${afk.set_at}:R>)`, inline: false });
   }
-  if (tempban) {
-    modLines.push(`⏳ **Temp-ban actif** — expire <t:${tempban.expires_at}:R>`);
-  }
-  if (member?.communicationDisabledUntil) {
-    modLines.push(`🔇 **Mute actif** — expire <t:${Math.floor(member.communicationDisabledUntil.getTime() / 1000)}:R>`);
-  }
-  if (afk) {
-    modLines.push(`💤 **AFK** — ${afk.reason} (depuis <t:${afk.set_at}:R>)`);
-  }
-
-  embed.addFields({ name: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', value: modLines.join('\n'), inline: false });
 
   // ── Boutons d'action rapide (uniquement si le user a les perms) ─────────
   const canModerate = interaction.memberPermissions.has(PermissionFlagsBits.KickMembers)

@@ -3,9 +3,12 @@ import { getGuildConfig } from '../../database/repositories/GuildConfigRepositor
 import { COLORS, errorEmbed, successEmbed } from '../../utils/embeds.js';
 import { bus } from '../../http/events.js';
 
-// Anti-spam simple : 1 report / user / 60s
+// Anti-spam simple : 1 report / user / guild / 60s.
+// Clé composite pour éviter qu'un cooldown sur le serveur A bloque le report
+// sur le serveur B.
 const recentReports = new Map();
 const REPORT_COOLDOWN_MS = 60_000;
+const makeCooldownKey = (userId, guildId) => `${userId}|${guildId}`;
 
 export const data = new SlashCommandBuilder()
   .setName('report')
@@ -20,14 +23,8 @@ export async function execute(interaction) {
   if (target.id === interaction.user.id) return interaction.reply({ embeds: [errorEmbed('Tu ne peux pas te signaler toi-même.')], ephemeral: true });
   if (target.bot)                        return interaction.reply({ embeds: [errorEmbed('Tu ne peux pas signaler un bot.')], ephemeral: true });
 
-  const last = recentReports.get(interaction.user.id) ?? 0;
-  const now  = Date.now();
-  if (now - last < REPORT_COOLDOWN_MS) {
-    const wait = Math.ceil((REPORT_COOLDOWN_MS - (now - last)) / 1000);
-    return interaction.reply({ embeds: [errorEmbed(`Attends encore ${wait}s avant un nouveau signalement.`)], ephemeral: true });
-  }
-  recentReports.set(interaction.user.id, now);
-
+  // ── D'abord : vérifier que les modlogs sont fonctionnels ─────────────────
+  // Sans ça, un cooldown consommé pour rien si la config est cassée.
   const config = getGuildConfig(interaction.guild.id);
   if (!config.modlogs_channel_id) {
     return interaction.reply({
@@ -35,11 +32,20 @@ export async function execute(interaction) {
       ephemeral: true,
     });
   }
-
   const channel = interaction.guild.channels.cache.get(config.modlogs_channel_id);
   if (!channel?.isTextBased()) {
     return interaction.reply({ embeds: [errorEmbed('Salon de modlogs introuvable.')], ephemeral: true });
   }
+
+  // ── Puis : cooldown per-guild (le report est effectivement envoyable) ────
+  const cdKey = makeCooldownKey(interaction.user.id, interaction.guild.id);
+  const last  = recentReports.get(cdKey) ?? 0;
+  const now   = Date.now();
+  if (now - last < REPORT_COOLDOWN_MS) {
+    const wait = Math.ceil((REPORT_COOLDOWN_MS - (now - last)) / 1000);
+    return interaction.reply({ embeds: [errorEmbed(`Attends encore ${wait}s avant un nouveau signalement.`)], ephemeral: true });
+  }
+  recentReports.set(cdKey, now);
 
   const embed = new EmbedBuilder()
     .setTitle('🚨 Nouveau signalement')
