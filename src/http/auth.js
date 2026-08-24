@@ -2,6 +2,7 @@ import fastifyCookie from '@fastify/cookie';
 import fastifyJwt from '@fastify/jwt';
 import fastifyOauth2 from '@fastify/oauth2';
 import { logger } from '../utils/logger.js';
+import { ensureSecret } from '../utils/env.js';
 
 const SESSION_COOKIE = 'grook_session';
 const SESSION_TTL    = '7d';
@@ -15,16 +16,15 @@ const SESSION_TTL    = '7d';
 export async function registerAuth(fastify, { publicUrl, ownerId }) {
   const clientId     = process.env.DISCORD_CLIENT_ID;
   const clientSecret = process.env.DISCORD_CLIENT_SECRET;
-  const jwtSecret    = process.env.DASHBOARD_JWT_SECRET;
+
+  // JWT secret : auto-généré + persisté dans .env si manquant.
+  const jwtSecret = ensureSecret('DASHBOARD_JWT_SECRET');
 
   if (!clientId || !clientSecret) {
-    throw new Error('DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET requis pour le dashboard.');
-  }
-  if (!jwtSecret || jwtSecret.length < 32) {
-    throw new Error('DASHBOARD_JWT_SECRET manquant ou < 32 caractères (openssl rand -hex 32).');
+    throw new Error('DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET requis pour le dashboard — configure les via le portail Discord Developer puis relance.');
   }
   if (!ownerId) {
-    throw new Error('BOT_OWNER_ID requis pour le dashboard (accès mono-user).');
+    throw new Error('BOT_OWNER_ID requis pour le dashboard (accès mono-user) — mets ton ID Discord dans .env.');
   }
 
   await fastify.register(fastifyCookie);

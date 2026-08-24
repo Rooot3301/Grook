@@ -29,20 +29,27 @@ client.interactionHandlers = new Map();
 await loadCommands(client);
 await loadEvents(client);
 
-// Dashboard web (optionnel, activé via DASHBOARD_ENABLED=true)
+// Dashboard web (opt-in via DASHBOARD_ENABLED=true) — jamais fatal pour le bot.
 let dashboard = null;
 if (process.env.DASHBOARD_ENABLED === 'true') {
-  try {
-    const { startDashboard } = await import('./http/server.js');
-    client.once('ready', async () => {
-      try {
-        dashboard = await startDashboard(client);
-      } catch (err) {
-        logger.error('[dashboard] Démarrage échoué :', err.message);
-      }
-    });
-  } catch (err) {
-    logger.error('[dashboard] Import échoué :', err.message);
+  // Précheck lisible : liste ce qui manque, pas de crash silencieux.
+  const missing = [];
+  if (!process.env.DISCORD_CLIENT_ID)     missing.push('DISCORD_CLIENT_ID');
+  if (!process.env.DISCORD_CLIENT_SECRET) missing.push('DISCORD_CLIENT_SECRET');
+  if (!process.env.BOT_OWNER_ID)          missing.push('BOT_OWNER_ID');
+
+  if (missing.length) {
+    logger.error(`[dashboard] Config incomplète — variables manquantes : ${missing.join(', ')}. Dashboard désactivé (le bot continue).`);
+  } else {
+    try {
+      const { startDashboard } = await import('./http/server.js');
+      client.once('ready', async () => {
+        try { dashboard = await startDashboard(client); }
+        catch (err) { logger.error('[dashboard] Démarrage échoué (bot continue) :', err.message); }
+      });
+    } catch (err) {
+      logger.error('[dashboard] Import échoué (bot continue) :', err.message);
+    }
   }
 }
 
