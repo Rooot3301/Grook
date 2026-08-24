@@ -109,27 +109,39 @@ export async function syncCommands(client, defs = null, opts = {}) {
     defs = [...client.commands.values()].map(c => c.data.toJSON());
   }
 
-  const devGuildId = process.env.DEV_GUILD_ID?.trim();
-  const summary = { scope: null, published: 0, wiped: [], nuked: false };
+  // DEV_GUILD_ID peut être une liste : "id1,id2,id3". Utile si tu as plusieurs
+  // serveurs (staging, prod) et que tu veux les commandes instantanées partout
+  // sans attendre la propagation globale (~1h).
+  const devGuildIds = (process.env.DEV_GUILD_ID ?? '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  const summary = { scope: null, published: 0, wiped: [], nuked: false, guilds: [] };
 
   if (opts.nuke) {
     summary.wiped.push(...(await nukeCommands(client)));
     summary.nuked = true;
   }
 
-  if (devGuildId) {
-    const guild = client.guilds.cache.get(devGuildId);
-    if (!guild) {
-      logger.warn(`[commands] DEV_GUILD_ID="${devGuildId}" introuvable — fallback global.`);
+  if (devGuildIds.length > 0) {
+    for (const gid of devGuildIds) {
+      const guild = client.guilds.cache.get(gid);
+      if (!guild) {
+        logger.warn(`[commands] DEV_GUILD_ID="${gid}" introuvable dans le cache — ignoré.`);
+        continue;
+      }
+      await guild.commands.set(defs);
+      logger.info(`[commands] ${defs.length} commande(s) publiée(s) sur ${guild.name} (${gid}).`);
+      summary.guilds.push({ id: gid, name: guild.name, published: defs.length });
+    }
+
+    if (summary.guilds.length === 0) {
+      logger.warn('[commands] Aucune guild valide — fallback global.');
       await client.application.commands.set(defs);
       summary.scope = 'global-fallback';
       summary.published = defs.length;
       return summary;
     }
 
-    await guild.commands.set(defs);
-    logger.info(`[commands] ${defs.length} commande(s) publiée(s) sur la guild ${devGuildId}.`);
-    summary.scope = 'guild';
+    summary.scope = devGuildIds.length === 1 ? 'guild' : 'multi-guild';
     summary.published = defs.length;
 
     if (!opts.nuke) {
