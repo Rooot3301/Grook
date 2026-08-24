@@ -145,9 +145,19 @@ function buildDetailEmbed(detail, guildCount) {
   return embed;
 }
 
-function buildCategoryEmbed(client, category) {
+/** Une commande est visible si le membre a la perm requise déclarée. */
+function isCommandVisible(cmd, memberPerms) {
+  const req = cmd.data.default_member_permissions
+    ?? cmd.data.toJSON().default_member_permissions;
+  if (!req) return true;
+  return memberPerms.has(BigInt(req));
+}
+
+function buildCategoryEmbed(client, category, memberPerms) {
   const meta = CATEGORY_META[category] ?? { icon: '📁', label: category, color: COLORS.INFO };
-  const cmds = [...client.commands.values()].filter(c => c.category === category);
+  const cmds = [...client.commands.values()]
+    .filter(c => c.category === category)
+    .filter(c => !memberPerms || isCommandVisible(c, memberPerms));
   const lines = cmds.flatMap(extractLines).sort((a, b) => a.name.localeCompare(b.name));
 
   const embed = new EmbedBuilder()
@@ -201,11 +211,12 @@ export async function execute(interaction, client) {
     });
   }
 
-  // Mode "catégorie" — 5 boutons de navigation
-  const defaultCat = 'moderation';
-  const embed = buildCategoryEmbed(client, defaultCat);
-  const row   = buildRow(defaultCat);
-  const msg   = await interaction.reply({ embeds: [embed], components: [row], ephemeral: true, fetchReply: true });
+  // Mode "catégorie" — filtre par permissions de l'utilisateur.
+  const memberPerms = interaction.memberPermissions;
+  const defaultCat  = 'moderation';
+  const embed       = buildCategoryEmbed(client, defaultCat, memberPerms);
+  const row         = buildRow(defaultCat);
+  const msg         = await interaction.reply({ embeds: [embed], components: [row], ephemeral: true, fetchReply: true });
 
   const collector = msg.createMessageComponentCollector({
     filter: i => i.user.id === interaction.user.id && i.customId.startsWith('help_cat_'),
@@ -214,7 +225,7 @@ export async function execute(interaction, client) {
 
   collector.on('collect', async btn => {
     const cat = btn.customId.replace('help_cat_', '');
-    await btn.update({ embeds: [buildCategoryEmbed(client, cat)], components: [buildRow(cat)] });
+    await btn.update({ embeds: [buildCategoryEmbed(client, cat, memberPerms)], components: [buildRow(cat)] });
   });
 
   collector.on('end', () => interaction.editReply({ components: [] }).catch(() => {}));

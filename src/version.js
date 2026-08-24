@@ -1,11 +1,30 @@
 // Source unique de vérité pour la version du bot.
 // Incrémentez VERSION à chaque release.
 
-export const VERSION    = '2.7.0';
+export const VERSION    = '2.8.0';
 export const BUILD_DATE = '2026-08-21';
 
 // Changelog compact — dernières entrées en tête
 export const CHANGELOG = [
+  { version: '2.8.0', date: '2026-08-21', changes: [
+    'SEC 🔴: /fun quote vérifie ViewChannel+ReadMessageHistory de l\'appelant',
+    'SEC 🔴: /nick hierarchy check du modo (pas seulement du bot) + protection owner',
+    'SEC 🔴: /announce ping:true nécessite MentionEveryone',
+    'SEC 🔴: /tempban INSERT DB avant BAN Discord + rollback',
+    'SEC 🔴: /softban finalise le case même si l\'unban auto échoue',
+    '🟠 /user info : infos modération gated Kick Members',
+    '🟠 /clear user:X paginé jusqu\'à 1000 messages scannés',
+    '🟠 /poll : setMaxLength strict sur question et options',
+    '🟠 /game spy : gestion propre des DM fermés (annulation si >1/3)',
+    '🟠 /report : cooldown APRÈS check modlogs + per-guild',
+    '🟡 /afk : update raison sans quitter l\'AFK',
+    '🟡 /help : filtre par permissions du membre',
+    '🟡 /game guess : max 10 essais par joueur',
+    'FEAT /warn add|remove|list|clear — CRUD complet + raisons obligatoires',
+    'FEAT /case remove reason obligatoire (audit) + /case note',
+    'FEAT /ban id:<snowflake> pour bannir un compte hors serveur',
+    'FEAT /config automod view|toggle|set|reset depuis Discord',
+  ] },
   { version: '2.7.0', date: '2026-08-21', changes: [
     'P0: tempban ne purge la DB que si l\'unban Discord a réussi',
     'P0: /panic on snapshot chaque salon, /panic off restaure exactement',

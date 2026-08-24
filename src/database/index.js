@@ -41,6 +41,7 @@ db.exec(`
     user_id      TEXT    NOT NULL,
     moderator_id TEXT    NOT NULL,
     reason       TEXT    DEFAULT 'Aucune raison',
+    notes        TEXT,               -- notes staff ajoutées après-coup (JSON-lines)
     expires_at   INTEGER,
     created_at   INTEGER DEFAULT (unixepoch()),
     UNIQUE(guild_id, case_id),
@@ -157,6 +158,12 @@ for (const col of legacyEggCols) {
   if (existingCols.includes(col)) {
     db.exec(`ALTER TABLE guild_configs DROP COLUMN ${col}`);
   }
+}
+
+// Migration : cases.notes (ajouté en 2.8).
+const caseColsForNotes = db.prepare("PRAGMA table_info(cases)").all().map(r => r.name);
+if (!caseColsForNotes.includes('notes')) {
+  db.exec('ALTER TABLE cases ADD COLUMN notes TEXT');
 }
 
 // Migration : cases.guild_seq (ajouté en 2.5). Backfill : recalcule depuis id.

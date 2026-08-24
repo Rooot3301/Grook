@@ -29,6 +29,12 @@ export function countWarnings(guildId) {
   return db.prepare('SELECT COUNT(*) AS c FROM warnings WHERE guild_id = ?').get(guildId).c;
 }
 
+/** Supprime TOUS les warns d'un utilisateur sur une guild. Retourne le nombre supprimé. */
+export function clearWarnsForUser(guildId, userId) {
+  const info = db.prepare('DELETE FROM warnings WHERE guild_id = ? AND user_id = ?').run(guildId, userId);
+  return info.changes;
+}
+
 /** Supprime un avertissement par ID (sans vérification de guild). */
 export function removeWarn(id) {
   const row = db.prepare('SELECT * FROM warnings WHERE id = ?').get(id);

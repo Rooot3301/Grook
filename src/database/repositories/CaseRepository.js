@@ -66,3 +66,16 @@ export function removeCase(guildId, caseId) {
   db.prepare('DELETE FROM cases WHERE guild_id = ? AND case_id = ?').run(guildId, caseId);
   return existing;
 }
+
+/**
+ * Ajoute une note staff à un cas. Stocké en JSON-lines dans la colonne `notes`.
+ * Chaque ligne = { by, at, text }. Retourne le cas mis à jour ou null.
+ */
+export function addNoteToCase(guildId, caseId, noteText, moderatorId) {
+  const existing = getCase(guildId, caseId);
+  if (!existing) return null;
+  const entry = JSON.stringify({ by: moderatorId, at: Math.floor(Date.now() / 1000), text: noteText });
+  const nextNotes = existing.notes ? existing.notes + '\n' + entry : entry;
+  db.prepare('UPDATE cases SET notes = ? WHERE guild_id = ? AND case_id = ?').run(nextNotes, guildId, caseId);
+  return getCase(guildId, caseId);
+}

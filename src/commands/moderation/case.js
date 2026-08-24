@@ -1,5 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
-import { getCasesForUser, getAllCases, removeCase } from '../../database/repositories/CaseRepository.js';
+import {
+  getCasesForUser, getAllCases, removeCase, addNoteToCase, getCase,
+} from '../../database/repositories/CaseRepository.js';
 import { sendPaginated } from '../../utils/pagination.js';
 import { COLORS, successEmbed, errorEmbed } from '../../utils/embeds.js';
 import { logChannelAction } from '../../features/modlogs.js';
@@ -17,16 +19,34 @@ export const data = new SlashCommandBuilder()
     .setDescription('Lister les cas du serveur (récents en premier).'))
   .addSubcommand(s => s
     .setName('remove')
-    .setDescription('Supprimer un cas (Manage Server requis).')
+    .setDescription('Supprimer un cas (Manage Server + raison obligatoire).')
     .addStringOption(o => o
       .setName('id')
       .setDescription('ID du cas (autocomplete)')
       .setRequired(true)
-      .setAutocomplete(true)));
+      .setAutocomplete(true))
+    .addStringOption(o => o
+      .setName('reason')
+      .setDescription('Motif de la suppression (audit)')
+      .setRequired(true)
+      .setMaxLength(300)))
+  .addSubcommand(s => s
+    .setName('note')
+    .setDescription('Ajouter une note staff à un cas.')
+    .addStringOption(o => o
+      .setName('id')
+      .setDescription('ID du cas (autocomplete)')
+      .setRequired(true)
+      .setAutocomplete(true))
+    .addStringOption(o => o
+      .setName('text')
+      .setDescription('Contenu de la note')
+      .setRequired(true)
+      .setMaxLength(500)));
 
 export async function autocomplete(interaction) {
   const sub = interaction.options.getSubcommand();
-  if (sub !== 'remove') return interaction.respond([]);
+  if (sub !== 'remove' && sub !== 'note') return interaction.respond([]);
   const focused = interaction.options.getFocused()?.toString().toUpperCase() ?? '';
   const list = getAllCases(interaction.guild.id, { limit: 25 });
   const matches = list
@@ -44,6 +64,7 @@ export async function execute(interaction) {
   if (sub === 'view')   return viewCase(interaction);
   if (sub === 'list')   return listCases(interaction);
   if (sub === 'remove') return removeCaseCmd(interaction);
+  if (sub === 'note')   return noteCaseCmd(interaction);
 }
 
 async function viewCase(interaction) {
@@ -65,10 +86,11 @@ async function viewCase(interaction) {
       .setDescription(`**${cases.length}** cas enregistré(s).`);
 
     for (const c of slice) {
-      const exp = c.expires_at ? ` · Exp: <t:${c.expires_at}:R>` : '';
+      const exp   = c.expires_at ? ` · Exp: <t:${c.expires_at}:R>` : '';
+      const notes = c.notes ? `\n📝 ${c.notes.split('\n').length} note(s)` : '';
       embed.addFields({
         name:  `\`${c.case_id}\` — ${c.type}${exp}`,
-        value: `${c.reason}\n— <@${c.moderator_id}> · <t:${c.created_at}:F>`,
+        value: `${c.reason}\n— <@${c.moderator_id}> · <t:${c.created_at}:F>${notes}`,
       });
     }
     return embed;
@@ -96,7 +118,7 @@ async function listCases(interaction) {
         value: `<@${c.user_id}> · ${c.reason}\n— <@${c.moderator_id}> · <t:${c.created_at}:R>`,
       });
     }
-    embed.setFooter({ text: 'Détail par membre : /case view @user' });
+    embed.setFooter({ text: 'Détail par membre : /case view user:<@membre>' });
     return embed;
   }, { perPage: 5, ephemeral: true });
 }
@@ -107,6 +129,7 @@ async function removeCaseCmd(interaction) {
   }
 
   const caseId  = interaction.options.getString('id', true).toUpperCase().trim();
+  const reason  = interaction.options.getString('reason', true);
   const removed = removeCase(interaction.guild.id, caseId);
 
   if (!removed) {
@@ -115,12 +138,38 @@ async function removeCaseCmd(interaction) {
 
   await logChannelAction(interaction.client, interaction.guild, {
     action: 'CASE_REMOVED', channel: null, moderator: interaction.user,
-    reason: `Cas ${caseId} supprimé (${removed.type} sur <@${removed.user_id}>)`,
-    extra: { '🗑️ Casier': `\`${caseId}\``, '👤 Concernait': `<@${removed.user_id}>` },
+    reason,
+    extra: {
+      '🗑️ Casier':      `\`${caseId}\``,
+      '👤 Concernait':   `<@${removed.user_id}>`,
+      '📋 Type':          removed.type,
+      '📝 Motif retrait': reason,
+    },
   });
 
   await interaction.reply({
-    embeds: [successEmbed(`Cas \`${caseId}\` (${removed.type}) supprimé.`)],
+    embeds: [successEmbed(`Cas \`${caseId}\` (${removed.type}) supprimé — motif : ${reason}`)],
+    ephemeral: true,
+  });
+}
+
+async function noteCaseCmd(interaction) {
+  const caseId = interaction.options.getString('id', true).toUpperCase().trim();
+  const text   = interaction.options.getString('text', true);
+
+  const updated = addNoteToCase(interaction.guild.id, caseId, text, interaction.user.id);
+  if (!updated) {
+    return interaction.reply({ embeds: [errorEmbed(`Aucun cas \`${caseId}\` trouvé.`)], ephemeral: true });
+  }
+
+  await logChannelAction(interaction.client, interaction.guild, {
+    action: 'CASE_NOTE', channel: null, moderator: interaction.user,
+    reason: text.slice(0, 200),
+    extra: { '📝 Casier': `\`${caseId}\``, '👤 Concerne': `<@${updated.user_id}>` },
+  });
+
+  await interaction.reply({
+    embeds: [successEmbed(`Note ajoutée au cas \`${caseId}\`.`)],
     ephemeral: true,
   });
 }

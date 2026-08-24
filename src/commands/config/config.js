@@ -3,6 +3,7 @@ import {
   ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } from 'discord.js';
 import { getGuildConfig, setGuildConfig, resetGuildConfig } from '../../database/repositories/GuildConfigRepository.js';
+import { getAutomodConfig, setAutomodConfig, resetAutomodConfig } from '../../database/repositories/AutomodRepository.js';
 import { COLORS } from '../../utils/embeds.js';
 
 export const data = new SlashCommandBuilder()
@@ -56,7 +57,28 @@ export const data = new SlashCommandBuilder()
         .setRequired(true)))
     .addSubcommand(sub => sub
       .setName('disable')
-      .setDescription('Désactiver les messages de bienvenue.')));
+      .setDescription('Désactiver les messages de bienvenue.')))
+  // /config automod view|toggle|set|reset
+  .addSubcommandGroup(grp => grp
+    .setName('automod')
+    .setDescription('Escalade automatique sur seuils de warns.')
+    .addSubcommand(sub => sub
+      .setName('view')
+      .setDescription('Voir la config automod actuelle.'))
+    .addSubcommand(sub => sub
+      .setName('toggle')
+      .setDescription('Activer/désactiver l\'automod.')
+      .addBooleanOption(o => o.setName('enabled').setDescription('true = activer').setRequired(true)))
+    .addSubcommand(sub => sub
+      .setName('set')
+      .setDescription('Définir les seuils. Passe 0 pour désactiver un seuil.')
+      .addIntegerOption(o => o.setName('mute_at')      .setDescription('Warns avant mute auto (0 = désactivé)').setMinValue(0).setMaxValue(100))
+      .addIntegerOption(o => o.setName('mute_duration').setDescription('Durée mute en secondes (min 60)')       .setMinValue(0).setMaxValue(28 * 24 * 3600))
+      .addIntegerOption(o => o.setName('kick_at')      .setDescription('Warns avant kick auto (0 = désactivé)').setMinValue(0).setMaxValue(100))
+      .addIntegerOption(o => o.setName('ban_at')       .setDescription('Warns avant ban auto (0 = désactivé)') .setMinValue(0).setMaxValue(100)))
+    .addSubcommand(sub => sub
+      .setName('reset')
+      .setDescription('Remettre l\'automod à zéro (désactivé, seuils vides).')));
 
 export async function execute(interaction, client) {
   const group   = interaction.options.getSubcommandGroup(false);
@@ -157,6 +179,54 @@ export async function execute(interaction, client) {
     if (sub === 'disable') {
       setGuildConfig(guildId, { welcome_channel_id: null });
       return interaction.reply({ content: '✅ Messages de bienvenue désactivés.', ephemeral: true });
+    }
+  }
+
+  // ── /config automod ───────────────────────────────────────────────────────
+  if (group === 'automod') {
+    if (sub === 'view') {
+      const cfg = getAutomodConfig(guildId);
+      const embed = new EmbedBuilder()
+        .setTitle('🤖 Automod')
+        .setColor(cfg.enabled ? COLORS.WARN : COLORS.INFO)
+        .addFields(
+          { name: '🔘 Actif',       value: cfg.enabled ? '`✅ Oui`' : '`❌ Non`',                                     inline: true },
+          { name: '🔇 Mute',        value: cfg.warn_mute_at ? `\`${cfg.warn_mute_at}\` warns → ${cfg.warn_mute_duration ?? 3600}s` : '`—`', inline: true },
+          { name: '👢 Kick',        value: cfg.warn_kick_at ? `\`${cfg.warn_kick_at}\` warns` : '`—`',                inline: true },
+          { name: '🔨 Ban',         value: cfg.warn_ban_at  ? `\`${cfg.warn_ban_at}\` warns`  : '`—`',                 inline: true },
+        )
+        .setFooter({ text: 'Modifie avec /config automod set — 0 pour désactiver un seuil.' });
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+    if (sub === 'toggle') {
+      const enabled = interaction.options.getBoolean('enabled', true);
+      setAutomodConfig(guildId, { enabled: enabled ? 1 : 0 });
+      return interaction.reply({ content: `✅ Automod ${enabled ? 'activé' : 'désactivé'}.`, ephemeral: true });
+    }
+    if (sub === 'set') {
+      const patch = {};
+      const muteAt   = interaction.options.getInteger('mute_at');
+      const muteDur  = interaction.options.getInteger('mute_duration');
+      const kickAt   = interaction.options.getInteger('kick_at');
+      const banAt    = interaction.options.getInteger('ban_at');
+
+      if (muteAt !== null)  patch.warn_mute_at       = muteAt  === 0 ? null : muteAt;
+      if (muteDur !== null) patch.warn_mute_duration = muteDur === 0 ? null : Math.max(60, muteDur);
+      if (kickAt !== null)  patch.warn_kick_at       = kickAt  === 0 ? null : kickAt;
+      if (banAt !== null)   patch.warn_ban_at        = banAt   === 0 ? null : banAt;
+
+      if (!Object.keys(patch).length) {
+        return interaction.reply({ content: '❌ Passe au moins un seuil.', ephemeral: true });
+      }
+      setAutomodConfig(guildId, patch);
+      return interaction.reply({
+        content: `✅ Automod mis à jour. Utilise \`/config automod view\` pour voir l'état.`,
+        ephemeral: true,
+      });
+    }
+    if (sub === 'reset') {
+      resetAutomodConfig(guildId);
+      return interaction.reply({ content: '✅ Automod réinitialisé (désactivé, seuils vides).', ephemeral: true });
     }
   }
 }
