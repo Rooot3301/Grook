@@ -39,6 +39,27 @@ export async function execute(interaction, client) {
   if (sub === 'cases')    return userCases(interaction);
 }
 
+// Badges publics (drapeaux User) — plus courants.
+const USER_FLAGS = {
+  Staff:                   { emoji: '🛠️', label: 'Discord Staff' },
+  Partner:                 { emoji: '🤝', label: 'Partenaire' },
+  Hypesquad:               { emoji: '🏠', label: 'HypeSquad Events' },
+  BugHunterLevel1:         { emoji: '🐛', label: 'Bug Hunter 1' },
+  HypeSquadOnlineHouse1:   { emoji: '⚔️', label: 'HypeSquad Bravery' },
+  HypeSquadOnlineHouse2:   { emoji: '🖌️', label: 'HypeSquad Brilliance' },
+  HypeSquadOnlineHouse3:   { emoji: '⚖️', label: 'HypeSquad Balance' },
+  PremiumEarlySupporter:   { emoji: '💎', label: 'Early Supporter' },
+  BugHunterLevel2:         { emoji: '🪲', label: 'Bug Hunter 2' },
+  VerifiedBot:             { emoji: '✅', label: 'Bot vérifié' },
+  VerifiedDeveloper:       { emoji: '⚙️', label: 'Bot Developer' },
+  CertifiedModerator:      { emoji: '🛡️', label: 'Modérateur certifié' },
+  ActiveDeveloper:         { emoji: '💻', label: 'Active Developer' },
+};
+
+const STATUS_LABEL = {
+  online: '🟢 En ligne', idle: '🌙 Absent', dnd: '⛔ Ne pas déranger', offline: '⚫ Hors-ligne',
+};
+
 // ─── Fiche riche aggrégée + boutons ──────────────────────────────────────────
 async function userInfo(interaction, client) {
   const target = interaction.options.getUser('user') ?? interaction.user;
@@ -56,28 +77,72 @@ async function userInfo(interaction, client) {
   const tempban  = canSeeMod ? getTempBan(gid, target.id)      : null;
   const afk      = getAfk(target.id, gid); // AFK est publique
 
+  // Fetch complet pour les banners/decorations
+  const fullUser = await client.users.fetch(target.id, { force: true }).catch(() => target);
+
   const embed = new EmbedBuilder()
-    .setColor(member?.displayHexColor ?? COLORS.INFO)
+    .setColor(member?.displayHexColor ?? fullUser.accentColor ?? COLORS.INFO)
     .setAuthor({ name: target.tag, iconURL: target.displayAvatarURL({ dynamic: true }) })
-    .setThumbnail(target.displayAvatarURL({ size: 256, dynamic: true }))
+    .setThumbnail(target.displayAvatarURL({ size: 512, dynamic: true }))
+    .setImage(fullUser.bannerURL?.({ size: 1024 }) ?? null)
     .addFields(
       { name: '🆔 ID',           value: `\`${target.id}\``, inline: true },
       { name: '📅 Compte créé',  value: `<t:${Math.floor(target.createdTimestamp / 1000)}:R>`, inline: true },
       { name: '🤖 Bot',          value: target.bot ? 'Oui' : 'Non', inline: true },
     );
 
+  // Badges Discord
+  const flags = fullUser.flags?.toArray?.() ?? [];
+  if (flags.length) {
+    const badgeStr = flags
+      .map(f => USER_FLAGS[f] ? `${USER_FLAGS[f].emoji} ${USER_FLAGS[f].label}` : `\`${f}\``)
+      .slice(0, 12)
+      .join(' · ');
+    embed.addFields({ name: `🎖️ Badges (${flags.length})`, value: badgeStr, inline: false });
+  }
+
   if (member) {
-    const allRoles = member.roles.cache.filter(r => r.id !== gid);
+    const allRoles = member.roles.cache
+      .filter(r => r.id !== gid)
+      .sort((a, b) => b.position - a.position);
     const shown    = allRoles.first(MAX_ROLES_SHOWN).map(r => r.toString());
     const overflow = Math.max(0, allRoles.size - shown.length);
+    const status   = member.presence?.status ?? 'offline';
+    const activity = member.presence?.activities?.[0];
+
     embed.addFields(
-      { name: '📥 Rejoint', value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true },
-      { name: '🎨 Couleur', value: member.displayHexColor === '#000000' ? '*(aucune)*' : member.displayHexColor, inline: true },
-      { name: '💬 Pseudo',  value: member.nickname || '*(aucun)*', inline: true },
-      { name: `🎭 Rôles (${allRoles.size})`,
-        value: shown.length ? shown.join(' ') + (overflow ? ` *+${overflow}*` : '') : '*(aucun)*',
-        inline: false },
+      { name: '📥 Rejoint',          value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true },
+      { name: '🏅 Rôle principal',   value: allRoles.first()?.toString() ?? '*(aucun)*', inline: true },
+      { name: '🎨 Couleur',           value: member.displayHexColor === '#000000' ? '*(aucune)*' : `\`${member.displayHexColor}\``, inline: true },
+      { name: '💬 Pseudo serveur',    value: member.nickname || '*(aucun)*', inline: true },
+      { name: '📡 Statut',            value: STATUS_LABEL[status] ?? status, inline: true },
     );
+
+    // Boost
+    if (member.premiumSinceTimestamp) {
+      embed.addFields({ name: '🚀 Boost depuis', value: `<t:${Math.floor(member.premiumSinceTimestamp / 1000)}:R>`, inline: true });
+    }
+
+    // Timeout actif
+    if (member.communicationDisabledUntilTimestamp && member.communicationDisabledUntilTimestamp > Date.now()) {
+      embed.addFields({
+        name: '🔇 Timeout actif',
+        value: `Jusqu'à <t:${Math.floor(member.communicationDisabledUntilTimestamp / 1000)}:R>`,
+        inline: true,
+      });
+    }
+
+    // Activité en cours
+    if (activity) {
+      const label = activity.type === 0 ? `🎮 Joue à` : activity.type === 1 ? `🔴 Stream` : activity.type === 2 ? `🎧 Écoute` : activity.type === 3 ? `👀 Regarde` : `📌`;
+      embed.addFields({ name: `${label}`, value: `\`${activity.name}\``, inline: true });
+    }
+
+    embed.addFields({
+      name: `🎭 Rôles (${allRoles.size})`,
+      value: shown.length ? shown.join(' ') + (overflow ? ` *+${overflow}*` : '') : '*(aucun)*',
+      inline: false,
+    });
   } else {
     embed.setFooter({ text: 'Cet utilisateur n\'est pas dans ce serveur.' });
   }
