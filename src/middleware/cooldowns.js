@@ -16,7 +16,7 @@ const COOLDOWN_MAP = {
   // Groupes
   user: 3, server: 10, game: 30, fun: 5, snipe: 5,
   // Fun
-  poll: 10, giveaway: 10,
+  poll: 10, giveaway: 10, usurper: 10,
   // Util
   remind: 3, afk: 3, ping: 3, botinfo: 5, help: 3, avatar: 3,
 };

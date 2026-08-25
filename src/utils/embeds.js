@@ -69,6 +69,7 @@ const ACTION_META = {
   CASE_NOTE:    { color: COLORS.INFO,    emoji: '📝', label: 'Note ajoutée'     },
   WARN_REMOVED: { color: COLORS.NEUTRAL, emoji: '🗑️', label: 'Warn retiré'      },
   WARN_CLEARED: { color: COLORS.NEUTRAL, emoji: '🧹', label: 'Warns purgés'    },
+  USURPER:      { color: COLORS.WARNING, emoji: '🎭', label: 'Usurpation'     },
 };
 
 /**
