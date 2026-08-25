@@ -1,7 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
 
 const LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
+
+/**
+ * Emitter interne pour pousser chaque log fraîchement écrit vers les
+ * abonnés (WebSocket du dashboard notamment). Importé indirectement pour
+ * éviter le cycle logger <-> http/events.
+ */
+export const logEmitter = new EventEmitter();
+logEmitter.setMaxListeners(0);
 const currentLevel = LEVELS[process.env.LOG_LEVEL?.toLowerCase()] ?? LEVELS.info;
 
 const jsonMode = process.env.LOG_FORMAT?.toLowerCase() === 'json';
@@ -60,6 +69,9 @@ function log(level, args) {
   // Buffer mémoire (le plus récent en tête)
   buffer.unshift(entry);
   if (buffer.length > BUFFER_MAX) buffer.length = BUFFER_MAX;
+
+  // Publish sur l'emitter interne — le WS du dashboard s'y abonne.
+  try { logEmitter.emit('log', entry); } catch { /* ignore listener errors */ }
 
   // Fichier JSON-lines (append)
   writeStream?.write(stringifySafe(entry) + '\n');

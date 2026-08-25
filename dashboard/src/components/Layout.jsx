@@ -3,6 +3,8 @@ import { Outlet, NavLink, useParams, useNavigate, useLocation } from 'react-rout
 import { useSession } from '../App.jsx';
 import { createEventStream } from '../ws.js';
 import { ErrorBoundary } from './ErrorBoundary.jsx';
+import { GlobalSearch } from './GlobalSearch.jsx';
+import { tryNotify } from '../theme.js';
 
 const NAV = [
   { n: '01', to: 'overview',   label: 'Aperçu' },
@@ -13,6 +15,7 @@ const NAV = [
   { n: '06', to: 'automod',    label: 'Automod' },
   { n: '07', to: 'users',      label: 'Utilisateurs' },
   { n: '08', to: 'journal',    label: 'Journal live' },
+  { n: '09', to: 'settings',   label: 'Réglages' },
 ];
 
 export function Layout() {
@@ -27,6 +30,9 @@ export function Layout() {
     const off = stream.on((evt) => {
       if (evt.type === 'hello') return;
       setLastEvent(evt);
+      // Push notification navigateur si l'utilisateur a activé ce type
+      // dans les Réglages (localStorage-based).
+      tryNotify(evt);
     });
     return () => { off(); stream.close(); };
   }, []);
@@ -86,12 +92,15 @@ export function Layout() {
       {/* ── MAIN COL ────────────────────────────────────────────────────── */}
       <div className="flex flex-col min-w-0">
         {/* Top bar */}
-        <header className="h-14 border-b border-border flex items-center justify-between px-6 bg-panel/50 backdrop-blur">
+        <header className="h-14 border-b border-border flex items-center justify-between gap-4 px-6 bg-panel/50 backdrop-blur">
           <GuildSwitcher
             current={guild}
             guilds={guilds}
             onPick={(id) => navigate(`/g/${id}/overview`)}
           />
+          <div className="flex-1 flex justify-center">
+            <GlobalSearch />
+          </div>
           <UserBadge user={user} />
         </header>
 

@@ -15,6 +15,23 @@
   ::-webkit-scrollbar-thumb:hover { background: #313850; }
 }
 
+/* Thème clair — override des couleurs Tailwind par CSS var + !important sur
+   les surfaces principales. Non exhaustif — certaines classes composées
+   (bg-panel-2/50 etc.) peuvent garder l'apparence dark. */
+html[data-theme="light"] body {
+  background-color: #faf7ef !important;
+  color: #1e1e26 !important;
+}
+html[data-theme="light"] .bg-bg      { background-color: #faf7ef !important; }
+html[data-theme="light"] .bg-panel   { background-color: #ffffff !important; }
+html[data-theme="light"] .bg-panel-2 { background-color: #efeee7 !important; }
+html[data-theme="light"] .border-border, html[data-theme="light"] .border { border-color: #dbd8ca !important; }
+html[data-theme="light"] .text-text     { color: #1e1e26 !important; }
+html[data-theme="light"] .text-text-dim { color: #6b6c78 !important; }
+html[data-theme="light"] .fill-border   { fill: #dbd8ca !important; }
+html[data-theme="light"] ::-webkit-scrollbar-thumb { background: #d0ccbd !important; }
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: #b8b4a3 !important; }
+
 @layer components {
   /* Case ID stamp — signature du dashboard */
   .stamp {

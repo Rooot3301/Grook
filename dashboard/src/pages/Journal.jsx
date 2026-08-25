@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { Page, Stamp, LoadingRow } from '../components/Page.jsx';
 import { createEventStream } from '../ws.js';
+import { createLogStream } from '../wsLogs.js';
 import { formatDate } from '../components/useGuildData.js';
 
 const TABS = [
@@ -170,29 +171,47 @@ const LEVEL_TAG = {
 };
 
 function SystemLogsTab() {
-  const [logs, setLogs]     = useState(null);
-  const [level, setLevel]   = useState('debug');
-  const [loading, setLoad]  = useState(false);
+  const [logs, setLogs]         = useState(null);
+  const [level, setLevel]       = useState('debug');
+  const [connected, setConn]    = useState(false);
+  const streamRef               = useRef(null);
 
-  async function refresh() {
-    setLoad(true);
-    try { setLogs((await api.systemLogs(200, level)).logs); }
-    finally { setLoad(false); }
-  }
+  // Seed initial via l'API REST — puis flux WebSocket qui pousse en direct.
+  useEffect(() => {
+    let alive = true;
+    api.systemLogs(200, level).then(r => { if (alive) setLogs(r.logs); }).catch(() => alive && setLogs([]));
 
-  useEffect(() => { refresh(); const t = setInterval(refresh, 4_000); return () => clearInterval(t); }, [level]);
+    const stream = createLogStream({ minLevel: level });
+    streamRef.current = stream;
+
+    const off = stream.on((entry) => {
+      setConn(true);
+      setLogs(prev => {
+        const next = [entry, ...(prev ?? [])];
+        return next.slice(0, 500);
+      });
+    });
+
+    return () => { alive = false; off(); stream.close(); setConn(false); };
+  }, [level]);
+
+  function clearLogs() { setLogs([]); }
 
   return (
     <>
       <div className="flex items-center justify-end gap-2 mb-3">
-        <div className="text-[11px] font-mono uppercase tracking-wider text-text-dim">Niveau min :</div>
+        <span className={`w-2 h-2 rounded-full ${connected ? 'bg-good' : 'bg-danger'}`} />
+        <span className="text-[11px] font-mono uppercase tracking-wider text-text-dim">
+          {connected ? 'live' : 'connexion…'}
+        </span>
+        <div className="ml-4 text-[11px] font-mono uppercase tracking-wider text-text-dim">Niveau min :</div>
         <select className="select w-28" value={level} onChange={e => setLevel(e.target.value)}>
           <option value="debug">debug</option>
           <option value="info">info</option>
           <option value="warn">warn</option>
           <option value="error">error</option>
         </select>
-        <button className="btn-ghost" onClick={refresh} disabled={loading}>Actualiser</button>
+        <button className="btn-ghost" onClick={clearLogs}>Vider l'écran</button>
       </div>
 
       <div className="panel divide-y divide-border overflow-hidden">
