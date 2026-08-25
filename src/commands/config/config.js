@@ -43,6 +43,16 @@ export const data = new SlashCommandBuilder()
     .addSubcommand(sub => sub
       .setName('disable')
       .setDescription('Désactiver le scanner de liens VirusTotal.')))
+  // /config antiscam toggle
+  .addSubcommandGroup(grp => grp
+    .setName('antiscam')
+    .setDescription('Anti-scam : supprime les token grabbers connus (MrBeast, Nitro, Steam, etc.).')
+    .addSubcommand(sub => sub
+      .setName('enable')
+      .setDescription('Activer l\'anti-scam.'))
+    .addSubcommand(sub => sub
+      .setName('disable')
+      .setDescription('Désactiver l\'anti-scam.')))
   // /config welcome set|disable
   .addSubcommandGroup(grp => grp
     .setName('welcome')
@@ -166,6 +176,18 @@ export async function execute(interaction, client) {
     if (sub === 'disable') {
       setGuildConfig(guildId, { vt_scanner: 0 });
       return interaction.reply({ content: '✅ Scanner VirusTotal désactivé.', ephemeral: true });
+    }
+  }
+
+  // ── /config antiscam ──────────────────────────────────────────────────────
+  if (group === 'antiscam') {
+    if (sub === 'enable') {
+      setGuildConfig(guildId, { anti_scam: 1 });
+      return interaction.reply({ content: '✅ Anti-scam activé — les token grabbers connus seront supprimés + timeout 2h.', ephemeral: true });
+    }
+    if (sub === 'disable') {
+      setGuildConfig(guildId, { anti_scam: 0 });
+      return interaction.reply({ content: '✅ Anti-scam désactivé.', ephemeral: true });
     }
   }
 

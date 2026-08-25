@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Outlet, NavLink, useParams, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useSession } from '../App.jsx';
 import { createEventStream } from '../ws.js';
+import { ErrorBoundary } from './ErrorBoundary.jsx';
 
 const NAV = [
   { n: '01', to: 'overview',   label: 'Aperçu' },
@@ -93,12 +94,27 @@ export function Layout() {
           <UserBadge user={user} />
         </header>
 
-        {/* Content */}
+        {/* Content — wrappé dans un ErrorBoundary keyé sur la route pour
+             que le crash d'une page ne blanchisse pas le dashboard entier. */}
         <main className="flex-1 overflow-auto">
-          <Outlet />
+          <RoutedErrorBoundary />
         </main>
       </div>
     </div>
+  );
+}
+
+/**
+ * Wrapper qui remonte le boundary à chaque changement de route.
+ * Sinon, une fois une page crashée, cliquer sur une autre entrée sidebar
+ * garderait le message d'erreur.
+ */
+function RoutedErrorBoundary() {
+  const loc = useLocation();
+  return (
+    <ErrorBoundary key={loc.pathname}>
+      <Outlet />
+    </ErrorBoundary>
   );
 }
 

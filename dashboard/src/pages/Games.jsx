@@ -7,28 +7,33 @@ export function Games() {
 
   if (q.loading) return <Page eyebrow="section 03" title="Jeux"><LoadingRow /></Page>;
 
-  // Agrégation par utilisateur, tous jeux confondus
-  const byUser = new Map();
-  const byGame = new Map();
-  for (const row of q.data || []) {
-    const u = byUser.get(row.user_id) || { user_id: row.user_id, total: 0, byGame: {} };
-    u.total += row.wins;
-    u.byGame[row.game] = (u.byGame[row.game] || 0) + row.wins;
-    byUser.set(row.user_id, u);
-    byGame.set(row.game, (byGame.get(row.game) || 0) + row.wins);
-  }
+  // getStatsForGuild renvoie { userId: { game: wins, ... }, ... } — un OBJET,
+  // pas un array. On agrège en 2 vues : par utilisateur, par jeu.
+  const raw = q.data || {};
+  const leaderboard = Object.entries(raw)
+    .map(([userId, byGame]) => ({
+      user_id: userId,
+      byGame,
+      total: Object.values(byGame).reduce((a, b) => a + b, 0),
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 25);
 
-  const leaderboard = [...byUser.values()].sort((a, b) => b.total - a.total).slice(0, 25);
-  const games = [...byGame.entries()].sort((a, b) => b[1] - a[1]);
+  const gameTotals = new Map();
+  for (const byGame of Object.values(raw)) {
+    for (const [game, wins] of Object.entries(byGame)) {
+      gameTotals.set(game, (gameTotals.get(game) || 0) + wins);
+    }
+  }
+  const games = [...gameTotals.entries()].sort((a, b) => b[1] - a[1]);
 
   return (
     <Page eyebrow="section 03" title="Jeux"
-          description="Compteurs de victoires par joueur et par jeu. Les statistiques sont accumulées à vie.">
+          description="Compteurs de victoires par joueur et par jeu. Statistiques cumulatives.">
       {leaderboard.length === 0
         ? <div className="panel p-6 text-center text-text-dim">Aucune partie jouée sur ce serveur.</div>
         : (
           <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
-            {/* Leaderboard */}
             <div className="panel overflow-hidden">
               <div className="px-4 py-3 border-b border-border h-eyebrow">Leaderboard</div>
               <table className="table">
@@ -59,7 +64,6 @@ export function Games() {
               </table>
             </div>
 
-            {/* Par jeu */}
             <div className="panel overflow-hidden">
               <div className="px-4 py-3 border-b border-border h-eyebrow">Par jeu</div>
               <div className="p-4 space-y-3">

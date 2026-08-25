@@ -1,11 +1,22 @@
 // Source unique de vérité pour la version du bot.
 // Incrémentez VERSION à chaque release.
 
-export const VERSION    = '2.8.0';
+export const VERSION    = '2.9.0';
 export const BUILD_DATE = '2026-08-21';
 
 // Changelog compact — dernières entrées en tête
 export const CHANGELOG = [
+  { version: '2.9.0', date: '2026-08-21', changes: [
+    'FIX dashboard : crash Jeux (getStatsForGuild retournait un objet, Games.jsx itérait comme array)',
+    'FIX dashboard : WebSocket "reconnexion" — handler @fastify/websocket v10 (socket direct, pas connection.socket)',
+    'FIX dashboard : boucle reload quand pas logué sur /',
+    'FIX dashboard : ErrorBoundary React — plus de blanc-page silencieux quand une page crashe',
+    'FEAT anti-scam : détection token grabbers (MrBeast, Nitro, Steam gift, OnlyFans free, etc.)',
+    '     → delete auto + timeout 2h + log modlogs. Toggle /config antiscam et dashboard.',
+    'FEAT /usurper : envoie un message avec nom+avatar d\'un membre via webhook',
+    'FEAT DEV_GUILD_ID accepte une liste d\'IDs (staging + prod instantanés)',
+    'FEAT ./grook.sh commands list/wipe + sync --nuke',
+  ] },
   { version: '2.8.0', date: '2026-08-21', changes: [
     'SEC 🔴: /fun quote vérifie ViewChannel+ReadMessageHistory de l\'appelant',
     'SEC 🔴: /nick hierarchy check du modo (pas seulement du bot) + protection owner',

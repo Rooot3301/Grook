@@ -12,6 +12,7 @@ export function Config() {
   const [modlogs, setModlogs] = useState('');
   const [welcome, setWelcome] = useState('');
   const [scanner, setScanner] = useState(false);
+  const [antiscam, setAntiscam] = useState(false);
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(null);
 
@@ -20,12 +21,14 @@ export function Config() {
     setModlogs(cfgQ.data.modlogs_channel_id ?? '');
     setWelcome(cfgQ.data.welcome_channel_id ?? '');
     setScanner(!!cfgQ.data.vt_scanner);
+    setAntiscam(!!cfgQ.data.anti_scam);
   }, [cfgQ.data]);
 
   const dirty = cfgQ.data && (
     (cfgQ.data.modlogs_channel_id ?? '') !== modlogs ||
     (cfgQ.data.welcome_channel_id ?? '') !== welcome ||
-    !!cfgQ.data.vt_scanner !== scanner
+    !!cfgQ.data.vt_scanner !== scanner ||
+    !!cfgQ.data.anti_scam  !== antiscam
   );
 
   if (cfgQ.loading || guildQ.loading) {
@@ -39,6 +42,7 @@ export function Config() {
         modlogs_channel_id: modlogs || null,
         welcome_channel_id: welcome || null,
         vt_scanner:         scanner ? 1 : 0,
+        anti_scam:          antiscam ? 1 : 0,
       });
       setSaved(Date.now());
       cfgQ.reload();
@@ -89,6 +93,13 @@ export function Config() {
           hint="Analyse automatique des liens postés. Nécessite VIRUSTOTAL_API_KEY côté serveur."
         >
           <Toggle checked={scanner} onChange={setScanner} label={scanner ? 'Activé' : 'Désactivé'} />
+        </Field>
+
+        <Field
+          label="Anti-scam"
+          hint="Détecte + supprime les token grabbers connus (MrBeast, Nitro gift, Steam gift, etc.). Timeout 2h sur les comptes source si signal fort."
+        >
+          <Toggle checked={antiscam} onChange={setAntiscam} label={antiscam ? 'Activé' : 'Désactivé'} />
         </Field>
       </div>
 

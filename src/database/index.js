@@ -28,6 +28,7 @@ db.exec(`
     modlogs_channel_id TEXT,
     welcome_channel_id TEXT,
     vt_scanner         INTEGER DEFAULT 0,
+    anti_scam          INTEGER DEFAULT 0,
     created_at         INTEGER DEFAULT (unixepoch()),
     updated_at         INTEGER DEFAULT (unixepoch())
   );
@@ -158,6 +159,12 @@ for (const col of legacyEggCols) {
   if (existingCols.includes(col)) {
     db.exec(`ALTER TABLE guild_configs DROP COLUMN ${col}`);
   }
+}
+
+// Migration : guild_configs.anti_scam (ajouté en 2.9).
+const gcCols = db.prepare("PRAGMA table_info(guild_configs)").all().map(r => r.name);
+if (!gcCols.includes('anti_scam')) {
+  db.exec('ALTER TABLE guild_configs ADD COLUMN anti_scam INTEGER DEFAULT 0');
 }
 
 // Migration : cases.notes (ajouté en 2.8).

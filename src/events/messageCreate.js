@@ -1,10 +1,15 @@
 import { handleLinkScan } from '../features/vtLinkScanner.js';
+import { handleAntiScam } from '../features/antiScam.js';
 import { getAfk, removeAfk } from '../database/repositories/AfkRepository.js';
 
 export default {
   name: 'messageCreate',
   async execute(message) {
     if (message.author.bot || !message.guild) return;
+
+    // Anti-scam : détecte + supprime les token grabbers connus (MrBeast,
+    // Nitro, Steam gifts, etc.). Passe avant le scanner VT.
+    await handleAntiScam(message);
 
     // Scan VirusTotal des liens postés
     await handleLinkScan(message);

@@ -69,6 +69,7 @@ export async function guildRoutes(fastify, { client }) {
           modlogs_channel_id: { type: ['string', 'null'], pattern: '^[0-9]{17,20}$' },
           welcome_channel_id: { type: ['string', 'null'], pattern: '^[0-9]{17,20}$' },
           vt_scanner:         { type: 'integer', enum: [0, 1] },
+          anti_scam:          { type: 'integer', enum: [0, 1] },
         },
       },
     },

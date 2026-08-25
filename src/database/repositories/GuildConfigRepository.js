@@ -4,6 +4,7 @@ const DEFAULTS = {
   modlogs_channel_id: null,
   welcome_channel_id: null,
   vt_scanner:         0,
+  anti_scam:          0,
 };
 
 /**
