@@ -60,4 +60,6 @@ export const api = {
   resetAutomod:  (id)                      => request(`/api/guilds/${id}/automod/reset`, { method: 'POST' }),
   systemInfo:    ()                        => request('/api/system/info'),
   systemLogs:    (limit = 100, level = 'debug') => request(`/api/system/logs?limit=${limit}&level=${level}`),
+  userSearch:    (id, q)                   => request(`/api/guilds/${id}/users/search?q=${encodeURIComponent(q)}`),
+  userDetail:    (id, userId)              => request(`/api/guilds/${id}/users/${userId}`),
 };

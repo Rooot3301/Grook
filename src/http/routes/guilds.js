@@ -1,7 +1,9 @@
 import { getGuildConfig, setGuildConfig, resetGuildConfig } from '../../database/repositories/GuildConfigRepository.js';
-import { getAllCases, removeCase, countCases } from '../../database/repositories/CaseRepository.js';
-import { getWarnsForGuild, removeWarnIfInGuild, countWarnings } from '../../database/repositories/WarnRepository.js';
-import { getTempBansForGuild, removeTempBan } from '../../database/repositories/TempBanRepository.js';
+import { getAllCases, removeCase, countCases, getCasesForUser } from '../../database/repositories/CaseRepository.js';
+import { getWarnsForGuild, removeWarnIfInGuild, countWarnings, getWarnsForUser } from '../../database/repositories/WarnRepository.js';
+import { getStatsForUser } from '../../database/repositories/StatsRepository.js';
+import { getAfk } from '../../database/repositories/AfkRepository.js';
+import { getTempBansForGuild, removeTempBan, getTempBan } from '../../database/repositories/TempBanRepository.js';
 import { getGiveawaysForGuild, getGiveaway } from '../../database/repositories/GiveawayRepository.js';
 import { finaliseGiveaway } from '../../features/giveaways.js';
 import { getStatsForGuild } from '../../database/repositories/StatsRepository.js';
@@ -197,5 +199,65 @@ export async function guildRoutes(fastify, { client }) {
     const next = resetAutomodConfig(request.params.id);
     bus.publish('automod:reset', request.params.id, {});
     return next;
+  });
+
+  // ── Users : recherche + fiche aggrégée ──────────────────────────────────
+  fastify.get('/api/guilds/:id/users/search', guard, async (request) => {
+    const q = (request.query.q || '').toString().toLowerCase().trim();
+    if (q.length < 1) return { items: [] };
+
+    const members = request.guild.members.cache;
+    const matches = [];
+    for (const m of members.values()) {
+      if (matches.length >= 25) break;
+      const tag = m.user.tag.toLowerCase();
+      const name = m.displayName.toLowerCase();
+      if (tag.includes(q) || name.includes(q) || m.id.includes(q)) {
+        matches.push({
+          id: m.id,
+          tag: m.user.tag,
+          displayName: m.displayName,
+          avatarUrl: m.displayAvatarURL({ size: 64 }),
+          bot: m.user.bot,
+        });
+      }
+    }
+    return { items: matches };
+  });
+
+  fastify.get('/api/guilds/:id/users/:userId', guard, async (request, reply) => {
+    const { id: gid, userId } = request.params;
+    const member = await request.guild.members.fetch(userId).catch(() => null);
+    const cases    = getCasesForUser(gid, userId);
+    const warns    = getWarnsForUser(gid, userId);
+    const tempban  = getTempBan(gid, userId);
+    const afk      = getAfk(userId, gid);
+    const gameStats = getStatsForUser(gid, userId);
+
+    if (!member && !cases.length && !warns.length && !tempban) {
+      return reply.code(404).send({ error: 'user_not_found' });
+    }
+
+    return {
+      user: member ? {
+        id:          member.id,
+        tag:         member.user.tag,
+        displayName: member.displayName,
+        avatarUrl:   member.displayAvatarURL({ size: 128 }),
+        bot:         member.user.bot,
+        createdAt:   Math.floor(member.user.createdTimestamp / 1000),
+        joinedAt:    member.joinedTimestamp ? Math.floor(member.joinedTimestamp / 1000) : null,
+        boostSince:  member.premiumSinceTimestamp ? Math.floor(member.premiumSinceTimestamp / 1000) : null,
+        highestRole: member.roles.highest ? { id: member.roles.highest.id, name: member.roles.highest.name, color: member.roles.highest.hexColor } : null,
+        roles: member.roles.cache.filter(r => r.id !== gid).map(r => ({ id: r.id, name: r.name, color: r.hexColor })),
+        status:      member.presence?.status ?? 'offline',
+        timeoutUntil: member.communicationDisabledUntilTimestamp,
+      } : { id: userId, tag: null, notInGuild: true },
+      cases,
+      warns,
+      tempban,
+      afk,
+      gameStats,
+    };
   });
 }
