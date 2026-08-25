@@ -12,8 +12,15 @@ async function request(path, { method = 'GET', body, signal } = {}) {
   });
 
   if (res.status === 401) {
-    // Session expirée ou absente → renvoie vers la page de login
-    if (!path.startsWith('/api/me')) window.location.href = '/';
+    // Session expirée ou absente.
+    //  - Si on est sur '/', App.jsx catche le throw et affiche <Login/> ;
+    //    un redirect vers '/' recauserait une boucle infinie.
+    //  - Si on est sur une page authed (ex: /g/123/moderation), on renvoie
+    //    l'utilisateur vers '/' pour qu'il voie l'écran de login.
+    const onLoginPage = window.location.pathname === '/';
+    if (!onLoginPage && !path.startsWith('/api/me')) {
+      window.location.href = '/';
+    }
     const err = new Error('unauthorized');
     err.status = 401;
     throw err;
