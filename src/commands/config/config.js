@@ -7,6 +7,7 @@ import {
 import { getGuildConfig, setGuildConfig, resetGuildConfig } from '../../database/repositories/GuildConfigRepository.js';
 import { getAutomodConfig, setAutomodConfig, resetAutomodConfig } from '../../database/repositories/AutomodRepository.js';
 import { COLORS } from '../../utils/embeds.js';
+import { logger } from '../../utils/logger.js';
 
 /**
  * `/config` — 3 sous-commandes seulement pour ne pas polluer l'autocomplete
@@ -108,8 +109,27 @@ async function openPanel(interaction, client) {
     const ns     = parts[0]; // 'cfgp' (composants panel) | 'cfgm' (modal automod)
     const action = parts[1];
 
-    // ── Modal soumission (seuils automod) ──────────────────────────────────
-    if (ns === 'cfgm' && action === 'automod' && i.isModalSubmit()) {
+    // ── Try/catch défensif : sans ça, une exception silencieuse empêche
+    // i.update() d'être appelé → Discord affiche "Grook n'a pas répondu à temps"
+    try {
+      await handleCollect(i, ns, action, parts, gid, interaction);
+    } catch (err) {
+      logger.error(`[config/panel] Erreur handler bouton ${i.customId} : ${err.message}`, err.stack);
+      // Best-effort : essaie d'acknowledger pour éviter le "did not respond"
+      try {
+        if (!i.replied && !i.deferred) {
+          await i.reply({ content: `❌ Erreur : \`${err.message}\``, ephemeral: true });
+        } else if (i.deferred) {
+          await i.editReply({ content: `❌ Erreur : \`${err.message}\`` });
+        }
+      } catch { /* ignore */ }
+    }
+  });
+
+  async function handleCollect(i, ns, action, parts, gid, interaction) {
+    // ── Modal soumission (seuils automod) — pas atteint ici en pratique
+    // (les modaux passent par interactionCreate), gardé pour compat.
+    if (ns === 'cfgm' && action === 'automod' && i.isModalSubmit?.()) {
       const patch = {};
       const num = (id) => {
         const raw = i.fields.getTextInputValue(id)?.trim();
@@ -188,7 +208,11 @@ async function openPanel(interaction, client) {
         );
       return i.showModal(modal);
     }
-  });
+
+    // Aucune action ne matche — log pour debug + ack quand même pour éviter timeout
+    logger.warn(`[config/panel] Aucune action pour customId "${i.customId}" (parts: ${JSON.stringify(parts)})`);
+    if (!i.replied && !i.deferred) await i.deferUpdate();
+  }
 
   // Séparément : les modal submits arrivent via client.interactionHandlers,
   // pas le collector au-dessus. On enregistre 'cfgm:automod' pour rediriger.
